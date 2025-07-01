@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # Main application
+  legacy-baas:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:9092
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+    networks:
+      - legacy-baas-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=legacy_baas
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - legacy-baas-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - legacy-baas-network
+
+  # Apache Kafka for event streaming
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - legacy-baas-network
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - legacy-baas-network
+
+  # Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    networks:
+      - legacy-baas-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    depends_on:
+      - prometheus
+    networks:
+      - legacy-baas-network
+
+  # Blockchain node simulators (for development)
+  xrp-simulator:
+    image: ripple/rippled:latest
+    ports:
+      - "6006:6006"
+      - "51235:51235"
+    volumes:
+      - ./config/rippled.cfg:/etc/opt/ripple/rippled.cfg
+    networks:
+      - legacy-baas-network
+
+  # Ethereum local node (Ganache)
+  ethereum-local:
+    image: trufflesuite/ganache:latest
+    ports:
+      - "8545:8545"
+    command: >
+      --accounts 10
+      --deterministic
+      --host 0.0.0.0
+      --networkId 1337
+      --quiet
+    networks:
+      - legacy-baas-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  legacy-baas-network:
+    driver: bridge
