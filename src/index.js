@@ -116,12 +116,14 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Start server
-app.listen(PORT, () => {
-  logger.info(`🚀 Legacy-to-Blockchain B2BaaS Platform started on port ${PORT}`);
-  logger.info(`📊 Health check: http://localhost:${PORT}/health`);
-  logger.info(`🔧 API status: http://localhost:${PORT}/api/v1/status`);
-  logger.info(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+// Start server only if this file is run directly (not imported)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    logger.info(`🚀 Legacy-to-Blockchain B2BaaS Platform started on port ${PORT}`);
+    logger.info(`📊 Health check: http://localhost:${PORT}/health`);
+    logger.info(`🔧 API status: http://localhost:${PORT}/api/v1/status`);
+    logger.info(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
 
 module.exports = app;
