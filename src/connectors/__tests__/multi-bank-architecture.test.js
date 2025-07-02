@@ -719,7 +719,7 @@ describe('Multi-Bank Architecture', () => {
 
 // Additional integration tests
 describe('Multi-Bank Integration Tests', () => {
-  test.skip('should handle multiple banks simultaneously', async () => {
+  test('should handle multiple banks simultaneously', async () => {
     const factory = new BankingConnectorFactory({
       maxConnectorsPerBank: 2,
       loadBalancingStrategy: 'round-robin'
@@ -772,6 +772,12 @@ describe('Multi-Bank Integration Tests', () => {
     // Verify both banks are registered
     expect(factory.connectorConfigs.size).toBe(2);
     expect(factory.connectors.size).toBe(2);
+
+    // Mark connectors as healthy/connected
+    const allConnectors = factory.connectors.get('BANK_A').concat(factory.connectors.get('BANK_B'));
+    allConnectors.forEach(connector => {
+      connector.isConnected = true;
+    });
 
     // Test getting connectors for both banks
     const connectorA = factory.getConnector('BANK_A');

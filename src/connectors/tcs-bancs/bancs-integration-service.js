@@ -114,6 +114,17 @@ class TCSBaNCSIntegrationService extends EventEmitter {
     const processingId = uuidv4();
     const startTime = Date.now();
 
+    let result = {
+      processingId,
+      transactionId: transaction.id,
+      status: 'processing',
+      stages: {},
+      validations: {},
+      enrichments: {},
+      recommendations: {},
+      timestamp: new Date().toISOString()
+    };
+
     try {
       logger.info('Starting transaction preprocessing', {
         processingId,
@@ -122,17 +133,6 @@ class TCSBaNCSIntegrationService extends EventEmitter {
         amount: transaction.amount,
         currency: transaction.currency
       });
-
-      const result = {
-        processingId,
-        transactionId: transaction.id,
-        status: 'processing',
-        stages: {},
-        validations: {},
-        enrichments: {},
-        recommendations: {},
-        timestamp: new Date().toISOString()
-      };
 
       // Track active processing
       this.activeTransactions.set(processingId, {
@@ -177,9 +177,8 @@ class TCSBaNCSIntegrationService extends EventEmitter {
         this.processingStats.complianceFailures++;
         this.emit(INTEGRATION_EVENTS.COMPLIANCE_FAILED, result);
         
-        if (!result.stages.compliance.requiresManualReview) {
-          return result;
-        }
+        // Return immediately for any compliance failure
+        return result;
       } else {
         this.emit(INTEGRATION_EVENTS.COMPLIANCE_PASSED, result);
       }
@@ -221,7 +220,7 @@ class TCSBaNCSIntegrationService extends EventEmitter {
         processingId,
         transactionId: transaction.id,
         error: error.message,
-        stage: result.currentStage
+        stage: result?.currentStage || 'unknown'
       });
 
       return {
@@ -362,6 +361,14 @@ class TCSBaNCSIntegrationService extends EventEmitter {
           error: error.message 
         });
         
+        // Check if this is a service availability error that should bubble up
+        if (error.message.includes('service unavailable') || 
+            error.message.includes('network error') || 
+            error.message.includes('timeout')) {
+          // Re-throw service errors to be caught by outer exception handler
+          throw error;
+        }
+        
         verifications.sender = {
           exists: false,
           error: error.message
@@ -421,6 +428,15 @@ class TCSBaNCSIntegrationService extends EventEmitter {
 
     } catch (error) {
       logger.error('Account verification error', { error: error.message });
+      
+      // Check if this is a service availability error that should bubble up
+      if (error.message.includes('service unavailable') || 
+          error.message.includes('network error') || 
+          error.message.includes('timeout')) {
+        // Re-throw service errors to be caught by outer exception handler
+        throw error;
+      }
+      
       return {
         passed: false,
         reason: `Account verification failed: ${error.message}`

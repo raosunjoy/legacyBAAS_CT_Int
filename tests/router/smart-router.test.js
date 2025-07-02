@@ -316,6 +316,15 @@ describe('Smart Router', () => {
 
   describe('Routing Conflict Resolution', () => {
     test('should return highest priority decision when multiple decisions exist', () => {
+      // Register mock gateways for each network to ensure they're available
+      const mockXrpGateway = { isConnected: true };
+      const mockCordaGateway = { isConnected: true };
+      const mockEthL2Gateway = { isConnected: true };
+      
+      router.registerGateway(BLOCKCHAIN_NETWORKS.XRP, mockXrpGateway);
+      router.registerGateway(BLOCKCHAIN_NETWORKS.CORDA, mockCordaGateway);
+      router.registerGateway(BLOCKCHAIN_NETWORKS.ETHEREUM_L2, mockEthL2Gateway);
+      
       const decisions = [
         { targetNetwork: BLOCKCHAIN_NETWORKS.XRP, priority: 70, confidence: 0.8 },
         { targetNetwork: BLOCKCHAIN_NETWORKS.CORDA, priority: 90, confidence: 0.7 },
@@ -328,6 +337,13 @@ describe('Smart Router', () => {
     });
 
     test('should use confidence as tiebreaker when priorities are equal', () => {
+      // Register mock gateways for the networks being tested
+      const mockXrpGateway = { isConnected: true };
+      const mockCordaGateway = { isConnected: true };
+      
+      router.registerGateway(BLOCKCHAIN_NETWORKS.XRP, mockXrpGateway);
+      router.registerGateway(BLOCKCHAIN_NETWORKS.CORDA, mockCordaGateway);
+      
       const decisions = [
         { targetNetwork: BLOCKCHAIN_NETWORKS.XRP, priority: 80, confidence: 0.7 },
         { targetNetwork: BLOCKCHAIN_NETWORKS.CORDA, priority: 80, confidence: 0.9 }

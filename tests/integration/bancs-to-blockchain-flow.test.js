@@ -26,6 +26,52 @@ jest.mock('winston', () => ({
   }
 }));
 
+// Mock TCS BaNCS Connector
+jest.mock('../../src/connectors/tcs-bancs/bancs-connector', () => {
+  const EventEmitter = require('events');
+  
+  class MockTCSBaNCSConnector extends EventEmitter {
+    constructor(config) {
+      super();
+      this.config = config;
+      this.bankCode = config.bankCode || 'TCS_BANCS';
+      this.isConnected = false;
+      this.metrics = {
+        totalRequests: 0,
+        successfulRequests: 0,
+        failedRequests: 0,
+        averageResponseTime: 0
+      };
+      
+      // Mock methods with default implementations
+      this.initialize = jest.fn().mockResolvedValue();
+      this.testConnection = jest.fn().mockResolvedValue(true);
+      this.getAccountDetails = jest.fn().mockResolvedValue({
+        accountNumber: 'TEST123',
+        accountStatus: 'ACTIVE',
+        currency: 'USD'
+      });
+      this.checkAccountBalance = jest.fn().mockResolvedValue({
+        availableBalance: 100000,
+        accountStatus: 'ACTIVE'
+      });
+      this.performComplianceCheck = jest.fn().mockResolvedValue({
+        passed: true,
+        riskScore: 25,
+        reason: 'Low risk transaction',
+        requiresManualReview: false,
+        aml: { passed: true, required: true },
+        sanctions: { passed: true, matches: [] }
+      });
+      this.validateTransaction = jest.fn().mockResolvedValue({ isValid: true });
+      this.getMetrics = jest.fn().mockReturnValue(this.metrics);
+      this.cleanup = jest.fn().mockResolvedValue();
+    }
+  }
+  
+  return { TCSBaNCSConnector: MockTCSBaNCSConnector };
+});
+
 // Mock axios for BaNCS connector
 jest.mock('axios', () => ({
   create: jest.fn(() => ({
@@ -406,21 +452,26 @@ POSSIBLE MONEY LAUNDERING
         }
       };
 
-      // Mock BaNCS compliance failure
-      const mockConnector = bancsIntegrationService.bancsConnector;
-      
-      mockConnector.getAccountDetails = jest.fn().mockResolvedValue({
+      // Create a fresh integration service instance to avoid mock conflicts
+      const testIntegrationService = new TCSBaNCSIntegrationService({
+        testMode: true,
+        bankCode: 'TESTBANK',
+        branchCode: 'BRANCH01'
+      });
+
+      // Mock the connector methods directly
+      testIntegrationService.bancsConnector.getAccountDetails = jest.fn().mockResolvedValue({
         accountNumber: '9999999999',
         accountStatus: 'ACTIVE',
         currency: 'USD'
       });
 
-      mockConnector.checkAccountBalance = jest.fn().mockResolvedValue({
+      testIntegrationService.bancsConnector.checkAccountBalance = jest.fn().mockResolvedValue({
         availableBalance: 100000,
         accountStatus: 'ACTIVE'
       });
 
-      mockConnector.performComplianceCheck = jest.fn().mockResolvedValue({
+      testIntegrationService.bancsConnector.performComplianceCheck = jest.fn().mockResolvedValue({
         passed: false,
         riskScore: 95, // Very high risk
         reason: 'High risk transaction - sanctions match detected',
@@ -430,7 +481,7 @@ POSSIBLE MONEY LAUNDERING
       });
 
       // Preprocess through BaNCS
-      const preprocessingResult = await bancsIntegrationService.preprocessTransaction(transaction);
+      const preprocessingResult = await testIntegrationService.preprocessTransaction(transaction);
       
       expect(preprocessingResult.status).toBe('compliance_failed');
       expect(preprocessingResult.stages.compliance.passed).toBe(false);
@@ -577,17 +628,23 @@ POSSIBLE MONEY LAUNDERING
         receiver: { account: '0987654321' }
       };
 
-      // Mock BaNCS service failure
-      const mockConnector = bancsIntegrationService.bancsConnector;
-      mockConnector.getAccountDetails = jest.fn().mockRejectedValue(new Error('BaNCS service unavailable'));
+      // Create a fresh integration service instance to avoid mock conflicts
+      const testIntegrationService = new TCSBaNCSIntegrationService({
+        testMode: true,
+        bankCode: 'TESTBANK',
+        branchCode: 'BRANCH01'
+      });
 
-      const preprocessingResult = await bancsIntegrationService.preprocessTransaction(transaction);
+      // Mock BaNCS service failure at the getAccountDetails level
+      testIntegrationService.bancsConnector.getAccountDetails = jest.fn().mockRejectedValue(new Error('BaNCS service unavailable'));
+
+      const preprocessingResult = await testIntegrationService.preprocessTransaction(transaction);
 
       expect(preprocessingResult.status).toBe('error');
       expect(preprocessingResult.error).toContain('BaNCS service unavailable');
 
       // Verify metrics tracked the failure
-      const metrics = bancsIntegrationService.getMetrics();
+      const metrics = testIntegrationService.getMetrics();
       expect(metrics.processing.failedValidations).toBeGreaterThan(0);
 
       console.log(`🔄 BaNCS Resilience Test:`);

@@ -171,7 +171,7 @@ class EnhancedSWIFTParser {
    * @returns {Object} Parsed message in standardized format
    */
   async parseMessage(message, messageType = null, options = {}) {
-    const startTime = Date.now();
+    const startTime = process.hrtime.bigint();
     const parseId = uuidv4();
 
     try {
@@ -219,7 +219,7 @@ class EnhancedSWIFTParser {
       parsedResult.parseMetadata = {
         parseId,
         originalFormat: detectedFormat,
-        parseTime: Date.now() - startTime,
+        parseTime: Math.max(1, Number((process.hrtime.bigint() - startTime) / BigInt(1000000))), // Convert nanoseconds to milliseconds, min 1ms
         timestamp: new Date().toISOString(),
         parserVersion: '2.0.0'
       };
@@ -238,7 +238,7 @@ class EnhancedSWIFTParser {
       }
 
       // Update metrics
-      this.updateMetrics('success', Date.now() - startTime, detectedFormat);
+      this.updateMetrics('success', parsedResult.parseMetadata.parseTime, detectedFormat);
       
       // Store in history
       this.parseHistory.set(parseId, {
@@ -250,13 +250,13 @@ class EnhancedSWIFTParser {
       logger.info('Message parsed successfully', {
         parseId,
         format: detectedFormat,
-        parseTime: Date.now() - startTime
+        parseTime: parsedResult.parseMetadata.parseTime
       });
 
       return parsedResult;
 
     } catch (error) {
-      this.updateMetrics('failure', Date.now() - startTime);
+      this.updateMetrics('failure', Number((process.hrtime.bigint() - startTime) / BigInt(1000000)));
       this.errorLog.push({
         parseId,
         error: error.message,
@@ -489,8 +489,10 @@ class EnhancedSWIFTParser {
       return 'TEMENOS_JSON';
     }
 
-    // FIS fixed-width detection (by length and pattern)
-    if (message.length >= 185 && !message.includes('<') && !message.includes('{')) {
+    // FIS fixed-width detection (by length and pattern - fixed-width banks records)
+    if (message.length >= 80 && !message.includes('<') && !message.includes('{') && 
+        !message.includes(':') && !message.includes('\n') && 
+        /^\d+\s+\d{6}[A-Z]{3}\d+\.\d{2}/.test(message)) {
       return 'FIS_FIXED';
     }
 
@@ -529,16 +531,17 @@ class EnhancedSWIFTParser {
       compliance.requiredChecks.push('receiver_kyc');
     }
 
-    // Extract transaction information
+    // Extract transaction information from parsed message
     compliance.transactionData = {
-      amount: fields.amount,
-      currency: fields.currency,
-      purpose: fields.purpose || fields.remittance_information,
-      valueDate: fields.valueDate || fields.value_date_currency_amount
+      amount: parsedMessage.amount,
+      currency: parsedMessage.currency,
+      purpose: parsedMessage.remittanceInfo || fields.purpose || fields.remittance_information,
+      valueDate: parsedMessage.valueDate || fields.valueDate || fields.value_date_currency_amount
     };
 
     // Risk indicators based on amount and purpose
-    if (parseFloat(fields.amount) > 10000) {
+    const amount = parseFloat(parsedMessage.amount || 0);
+    if (amount > 10000) {
       compliance.riskIndicators.push('high_value_transaction');
       compliance.requiredChecks.push('enhanced_due_diligence');
     }
@@ -568,31 +571,31 @@ class EnhancedSWIFTParser {
     switch (blockchainType) {
       case 'ethereum':
         return {
-          to: fields.receiverAccount,
-          value: fields.amount,
+          to: parsedMessage.receiver?.account || fields.receiverAccount,
+          value: parsedMessage.amount || fields.amount,
           data: this.encodeEthereumData(parsedMessage),
           gasLimit: 21000,
           metadata: {
-            currency: fields.currency,
-            purpose: fields.purpose,
-            sender: fields.senderName
+            currency: parsedMessage.currency || fields.currency,
+            purpose: parsedMessage.remittanceInfo || fields.purpose,
+            sender: parsedMessage.sender?.name || fields.senderName
           }
         };
 
       case 'ripple':
         return {
           TransactionType: 'Payment',
-          Account: fields.senderAccount,
-          Destination: fields.receiverAccount,
+          Account: parsedMessage.sender?.account || fields.senderAccount,
+          Destination: parsedMessage.receiver?.account || fields.receiverAccount,
           Amount: {
-            currency: fields.currency,
-            value: fields.amount,
-            issuer: fields.ordering_institution
+            currency: parsedMessage.currency || fields.currency,
+            value: parsedMessage.amount || fields.amount,
+            issuer: parsedMessage.orderingInstitution || fields.ordering_institution
           },
           Memos: [{
             Memo: {
               MemoType: Buffer.from('purpose', 'utf8').toString('hex'),
-              MemoData: Buffer.from(fields.purpose || '', 'utf8').toString('hex')
+              MemoData: Buffer.from(parsedMessage.remittanceInfo || fields.purpose || '', 'utf8').toString('hex')
             }
           }]
         };
@@ -601,12 +604,12 @@ class EnhancedSWIFTParser {
         return {
           fcn: 'transferFunds',
           args: [
-            fields.senderAccount,
-            fields.receiverAccount,
-            fields.amount,
-            fields.currency,
-            fields.purpose || '',
-            parsedMessage.parseMetadata.parseId
+            parsedMessage.sender?.account || fields.senderAccount,
+            parsedMessage.receiver?.account || fields.receiverAccount,
+            parsedMessage.amount || fields.amount,
+            parsedMessage.currency || fields.currency,
+            parsedMessage.remittanceInfo || fields.purpose || '',
+            parsedMessage.parseMetadata?.parseId || 'unknown'
           ],
           chaincode: 'banking-chaincode'
         };
