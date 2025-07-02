@@ -412,7 +412,7 @@ class EthereumL2Gateway extends BaseBlockchainGateway {
     
     // Execute transfer
     const tx = await tokenContract.transfer(receiverAddress, tokenAmount, {
-      gasLimit: gasEstimate.mul(120).div(100), // Add 20% buffer
+      gasLimit: gasEstimate * 120n / 100n, // Add 20% buffer using BigInt arithmetic
       maxFeePerGas: this.config.maxFeePerGas,
       maxPriorityFeePerGas: this.config.maxPriorityFeePerGas
     });

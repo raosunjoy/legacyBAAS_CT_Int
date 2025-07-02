@@ -37,6 +37,9 @@ class MockBlockchainGateway extends BaseBlockchainGateway {
       throw new Error('Mock transaction failure');
     }
     
+    // Add small delay to ensure latency > 0
+    await new Promise(resolve => setTimeout(resolve, 5));
+    
     return this.mockSubmissionResult;
   }
 
@@ -390,9 +393,11 @@ describe('Base Blockchain Gateway', () => {
     });
 
     test('should track transaction history with limits', async () => {
-      // Add multiple transactions
+      // Add multiple transactions with small delays to ensure different timestamps
       for (let i = 0; i < 5; i++) {
         await gateway.processTransaction({ ...mockTransaction, id: `tx-${i}` });
+        // Small delay to ensure different timestamps
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
 
       const history = gateway.getTransactionHistory(3);
