@@ -27,7 +27,8 @@ describe('Corda Gateway', () => {
     // Set up detailed mocks for Corda connector
     mockClient = {
       invokeContractV1: jest.fn(),
-      shutdown: jest.fn().mockResolvedValue(true)
+      shutdown: jest.fn().mockResolvedValue(true),
+      nodeInfo: jest.fn()
     };
     
     // Mock Corda Connector
@@ -681,7 +682,7 @@ describe('Corda Gateway', () => {
   describe('Error Handling', () => {
     test('should handle missing Corda SDK gracefully', () => {
       // Mock missing Corda SDK
-      jest.doMock('@r3/corda-sdk', () => {
+      jest.doMock('@hyperledger/cactus-plugin-ledger-connector-corda', () => {
         throw new Error('Module not found');
       });
 
