@@ -306,6 +306,35 @@ describe('Ethereum L2 Gateway', () => {
       expect(mockVaultContract.deposit).toHaveBeenCalled();
     });
 
+    test('should submit token withdraw successfully', async () => {
+      const withdrawTransaction = { ...mockTransaction, type: 'tokenWithdraw' };
+      
+      const mockWithdrawTx = {
+        hash: '0xwithdraw123',
+        wait: jest.fn().mockResolvedValue({
+          hash: '0xwithdraw123',
+          blockNumber: 1000002,
+          gasUsed: BigInt(50000),
+          status: 1
+        })
+      };
+
+      mockContract.decimals.mockResolvedValue(6);
+      
+      // Mock vault contract
+      const mockVaultContract = {
+        address: '0xvault123',
+        withdraw: jest.fn().mockResolvedValue(mockWithdrawTx)
+      };
+      gateway.contracts.set(CONTRACT_TYPES.DEPOSIT_VAULT, mockVaultContract);
+
+      const result = await gateway.submitTransaction(withdrawTransaction);
+
+      expect(result.id).toBe('0xwithdraw123');
+      expect(result.status).toBe(TRANSACTION_STATUS.CONFIRMED);
+      expect(mockVaultContract.withdraw).toHaveBeenCalled();
+    });
+
     test('should submit yield farming stake successfully', async () => {
       const farmTransaction = { 
         ...mockTransaction, 
@@ -381,6 +410,201 @@ describe('Ethereum L2 Gateway', () => {
 
       expect(result.id).toBe('0xlend123');
       expect(mockLendingContract.supply).toHaveBeenCalled();
+    });
+
+    test('should handle all yield farming actions', async () => {
+      const mockFarmContract = {
+        address: '0xfarm123',
+        stake: jest.fn().mockResolvedValue({ 
+          hash: '0xstake123', 
+          wait: jest.fn().mockResolvedValue({ 
+            hash: '0xstake123', 
+            status: 1, 
+            blockNumber: 1000001,
+            gasUsed: BigInt(75000)
+          }) 
+        }),
+        unstake: jest.fn().mockResolvedValue({ 
+          hash: '0xunstake123', 
+          wait: jest.fn().mockResolvedValue({ 
+            hash: '0xunstake123', 
+            status: 1,
+            blockNumber: 1000002,
+            gasUsed: BigInt(50000)
+          }) 
+        }),
+        harvest: jest.fn().mockResolvedValue({ 
+          hash: '0xharvest123', 
+          wait: jest.fn().mockResolvedValue({ 
+            hash: '0xharvest123', 
+            status: 1,
+            blockNumber: 1000003,
+            gasUsed: BigInt(40000)
+          }) 
+        })
+      };
+      gateway.contracts.set(CONTRACT_TYPES.YIELD_FARM, mockFarmContract);
+
+      // Test unstake
+      const unstakeTransaction = { ...mockTransaction, type: 'yieldFarm', action: 'unstake' };
+      await gateway.submitTransaction(unstakeTransaction);
+      expect(mockFarmContract.unstake).toHaveBeenCalled();
+
+      // Test harvest
+      const harvestTransaction = { ...mockTransaction, type: 'yieldFarm', action: 'harvest' };
+      await gateway.submitTransaction(harvestTransaction);
+      expect(mockFarmContract.harvest).toHaveBeenCalled();
+    });
+
+    test('should handle all lending actions', async () => {
+      const mockLendingContract = {
+        address: '0xlending123',
+        withdraw: jest.fn().mockResolvedValue({ 
+          hash: '0xwithdraw123', 
+          wait: jest.fn().mockResolvedValue({ 
+            hash: '0xwithdraw123', 
+            status: 1,
+            blockNumber: 1000004,
+            gasUsed: BigInt(60000)
+          }) 
+        }),
+        borrow: jest.fn().mockResolvedValue({ 
+          hash: '0xborrow123', 
+          wait: jest.fn().mockResolvedValue({ 
+            hash: '0xborrow123', 
+            status: 1,
+            blockNumber: 1000005,
+            gasUsed: BigInt(80000)
+          }) 
+        }),
+        repay: jest.fn().mockResolvedValue({ 
+          hash: '0xrepay123', 
+          wait: jest.fn().mockResolvedValue({ 
+            hash: '0xrepay123', 
+            status: 1,
+            blockNumber: 1000006,
+            gasUsed: BigInt(55000)
+          }) 
+        })
+      };
+      gateway.contracts.set(CONTRACT_TYPES.LENDING_POOL, mockLendingContract);
+
+      const mockApproveTx = { wait: jest.fn().mockResolvedValue({ status: 1 }) };
+      mockContract.approve.mockResolvedValue(mockApproveTx);
+
+      // Test withdraw
+      const withdrawTransaction = { ...mockTransaction, type: 'lending', action: 'withdraw' };
+      await gateway.submitTransaction(withdrawTransaction);
+      expect(mockLendingContract.withdraw).toHaveBeenCalled();
+
+      // Test borrow
+      const borrowTransaction = { ...mockTransaction, type: 'lending', action: 'borrow' };
+      await gateway.submitTransaction(borrowTransaction);
+      expect(mockLendingContract.borrow).toHaveBeenCalled();
+
+      // Test repay
+      const repayTransaction = { ...mockTransaction, type: 'lending', action: 'repay' };
+      await gateway.submitTransaction(repayTransaction);
+      expect(mockLendingContract.repay).toHaveBeenCalled();
+    });
+
+    test('should handle unknown yield farming action', async () => {
+      const mockFarmContract = { address: '0xfarm123' };
+      gateway.contracts.set(CONTRACT_TYPES.YIELD_FARM, mockFarmContract);
+
+      const invalidTransaction = { ...mockTransaction, type: 'yieldFarm', action: 'invalid' };
+      await expect(gateway.submitTransaction(invalidTransaction)).rejects.toThrow('Unknown yield farming action: invalid');
+    });
+
+    test('should handle unknown lending action', async () => {
+      const mockLendingContract = { address: '0xlending123' };
+      gateway.contracts.set(CONTRACT_TYPES.LENDING_POOL, mockLendingContract);
+
+      const invalidTransaction = { ...mockTransaction, type: 'lending', action: 'invalid' };
+      await expect(gateway.submitTransaction(invalidTransaction)).rejects.toThrow('Unknown lending action: invalid');
+    });
+
+    test('should handle lending when disabled', async () => {
+      gateway.config.enableLending = false;
+      const lendingTransaction = { 
+        ...mockTransaction, 
+        type: 'lending',
+        action: 'supply'
+      };
+
+      await expect(gateway.submitTransaction(lendingTransaction)).rejects.toThrow('Lending is disabled');
+    });
+
+    test('should handle yield farming harvest without approval', async () => {
+      const mockFarmContract = {
+        address: '0xfarm123',
+        harvest: jest.fn().mockResolvedValue({ 
+          hash: '0xharvest123', 
+          wait: jest.fn().mockResolvedValue({ 
+            hash: '0xharvest123', 
+            status: 1,
+            blockNumber: 1000007,
+            gasUsed: BigInt(40000)
+          }) 
+        })
+      };
+      gateway.contracts.set(CONTRACT_TYPES.YIELD_FARM, mockFarmContract);
+
+      const harvestTransaction = { ...mockTransaction, type: 'yieldFarm', action: 'harvest' };
+      const result = await gateway.submitTransaction(harvestTransaction);
+
+      expect(result.id).toBe('0xharvest123');
+      expect(mockFarmContract.harvest).toHaveBeenCalled();
+      // Harvest doesn't require approval, so approve should not be called
+      expect(mockContract.approve).not.toHaveBeenCalled();
+    });
+
+    test('should handle lending borrow action', async () => {
+      const mockLendingContract = {
+        address: '0xlending123',
+        borrow: jest.fn().mockResolvedValue({ 
+          hash: '0xborrow123', 
+          wait: jest.fn().mockResolvedValue({ 
+            hash: '0xborrow123', 
+            status: 1,
+            blockNumber: 1000008,
+            gasUsed: BigInt(80000)
+          }) 
+        })
+      };
+      gateway.contracts.set(CONTRACT_TYPES.LENDING_POOL, mockLendingContract);
+
+      const borrowTransaction = { ...mockTransaction, type: 'lending', action: 'borrow' };
+      const result = await gateway.submitTransaction(borrowTransaction);
+
+      expect(result.id).toBe('0xborrow123');
+      expect(mockLendingContract.borrow).toHaveBeenCalled();
+    });
+
+    test('should handle lending repay action with approval', async () => {
+      const mockLendingContract = {
+        address: '0xlending123',
+        repay: jest.fn().mockResolvedValue({ 
+          hash: '0xrepay123', 
+          wait: jest.fn().mockResolvedValue({ 
+            hash: '0xrepay123', 
+            status: 1,
+            blockNumber: 1000009,
+            gasUsed: BigInt(55000)
+          }) 
+        })
+      };
+      gateway.contracts.set(CONTRACT_TYPES.LENDING_POOL, mockLendingContract);
+
+      const mockApproveTx = { wait: jest.fn().mockResolvedValue({ status: 1 }) };
+      mockContract.approve.mockResolvedValue(mockApproveTx);
+
+      const repayTransaction = { ...mockTransaction, type: 'lending', action: 'repay' };
+      const result = await gateway.submitTransaction(repayTransaction);
+
+      expect(result.id).toBe('0xrepay123');
+      expect(mockLendingContract.repay).toHaveBeenCalled();
+      expect(mockContract.approve).toHaveBeenCalled(); // Repay requires approval
     });
 
     test('should throw error when provider not connected', async () => {
@@ -526,6 +750,21 @@ describe('Ethereum L2 Gateway', () => {
       expect(mockProvider.resolveName).toHaveBeenCalledWith('alice.eth');
     });
 
+    test('should handle ENS resolution failure gracefully', async () => {
+      // Connect the gateway first to initialize provider
+      mockProvider.getNetwork.mockResolvedValue({ chainId: BigInt(80001) });
+      mockProvider.getBlockNumber.mockResolvedValue(1000000);
+      await gateway.connect();
+      
+      mockProvider.resolveName.mockRejectedValue(new Error('ENS resolution failed'));
+      
+      const receiver = { ensName: 'invalid.eth' };
+      
+      // Should fall back to test address in test mode
+      const address = await gateway.resolveAddress(receiver);
+      expect(address).toBe('0x742d35Cc6634C0532925a3b8D4c8C9df4C5C1234');
+    });
+
     test('should return test address in test mode for unknown receiver', async () => {
       const unknownReceiver = { name: 'Unknown' };
       const address = await gateway.resolveAddress(unknownReceiver);
@@ -600,6 +839,12 @@ describe('Ethereum L2 Gateway', () => {
       await gateway.cleanup();
       expect(gateway.gasPriceMonitoringInterval).toBeNull();
     });
+
+    test('should handle gas price query failure', async () => {
+      mockProvider.getFeeData.mockRejectedValue(new Error('Gas price query failed'));
+
+      await expect(gateway.getGasPrice()).rejects.toThrow('Gas price query failed');
+    });
   });
 
   describe('Contract Management', () => {
@@ -649,6 +894,34 @@ describe('Ethereum L2 Gateway', () => {
       // Should not throw when gas price monitoring fails
       // The monitoring runs in background and logs errors
       expect(gateway.gasPriceMonitoringInterval).toBeDefined();
+    });
+
+    test('should handle missing ethers.js library during connect', async () => {
+      const testGateway = new EthereumL2Gateway({ testMode: true });
+      
+      // Override the connect method to simulate missing ethers
+      const originalConnect = testGateway.connect;
+      testGateway.connect = async function() {
+        throw new Error('Ethers.js library not available. Install with: npm install ethers');
+      };
+      
+      await expect(testGateway.connect()).rejects.toThrow('Ethers.js library not available');
+    });
+
+    test('should handle disconnection errors gracefully', async () => {
+      mockProvider.getNetwork.mockResolvedValue({ chainId: BigInt(80001) });
+      await gateway.connect();
+      
+      // Mock an error during cleanup
+      const originalClearInterval = clearInterval;
+      global.clearInterval = jest.fn(() => {
+        throw new Error('Cleanup error');
+      });
+      
+      await expect(gateway.disconnect()).rejects.toThrow('Cleanup error');
+      
+      // Restore
+      global.clearInterval = originalClearInterval;
     });
   });
 

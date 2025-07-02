@@ -272,6 +272,21 @@ describe('Smart Router', () => {
       
       expect(decision).not.toBeNull(); // Should avoid congestion
     });
+
+    test('should return null when all networks are congested and no urgency', () => {
+      // Mock all networks as congested
+      const networkMetrics = {
+        [BLOCKCHAIN_NETWORKS.XRP]: { congestion: 0.9, availability: 0.99 },
+        [BLOCKCHAIN_NETWORKS.CORDA]: { congestion: 0.9, availability: 0.98 },
+        [BLOCKCHAIN_NETWORKS.ETHEREUM_L2]: { congestion: 0.9, availability: 0.99 },
+        [BLOCKCHAIN_NETWORKS.ALGORAND]: { congestion: 0.9, availability: 0.99 }
+      };
+      const factors = { urgency: 'normal', networkMetrics };
+      
+      const decision = router.applyPerformanceRules(mockTransaction, factors);
+      
+      expect(decision).toBeNull();
+    });
   });
 
   describe('Cost Optimization Rules', () => {
