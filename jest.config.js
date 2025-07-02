@@ -90,8 +90,8 @@ module.exports = {
   // Detect leaked async operations
   detectLeaks: false, // Temporarily disabled for development
   
-  // Test name pattern
-  testNamePattern: '^((?!integration).)*$', // Exclude integration tests by default
+  // Test name pattern - exclude end-to-end integration tests but allow integration-service tests
+  testNamePattern: '^((?!e2e|end-to-end).)*$', // Exclude e2e/integration tests by default
   
   // Reporters
   reporters: [

@@ -28,7 +28,18 @@ describe('Corda Gateway', () => {
     mockClient = {
       invokeContractV1: jest.fn(),
       shutdown: jest.fn().mockResolvedValue(true),
-      nodeInfo: jest.fn()
+      nodeInfo: jest.fn(),
+      networkMap: jest.fn(),
+      vaultQuery: jest.fn(),
+      startFlow: jest.fn(),
+      getFlowProgress: jest.fn(),
+      flowStatus: jest.fn(),
+      flowKill: jest.fn(),
+      networkHealthCheck: jest.fn(),
+      partyFromX500Name: jest.fn(),
+      getFlowsForTransactionType: jest.fn(),
+      getNodeInfo: jest.fn(),
+      performHealthCheck: jest.fn()
     };
     
     // Mock Corda Connector
@@ -182,7 +193,6 @@ describe('Corda Gateway', () => {
     });
 
     test('should submit Corda flow successfully', async () => {
-      const mockFlowHandle = { id: 'flow-123' };
       const mockFlowResult = {
         stateRef: 'state-ref-123',
         stateRefs: ['state-ref-123'],
@@ -190,10 +200,14 @@ describe('Corda Gateway', () => {
         notarised: true
       };
 
-      mockClient.startFlow.mockResolvedValue(mockFlowHandle);
-      mockClient.getFlowProgress.mockResolvedValue({
-        finished: true,
-        result: mockFlowResult
+      // Mock invokeContractV1 which is what the gateway actually calls
+      mockClient.invokeContractV1.mockResolvedValue({
+        callData: {
+          flowId: 'flow-123',
+          success: true,
+          stateRef: 'state-ref-123',
+          result: mockFlowResult
+        }
       });
 
       const result = await gateway.submitTransaction(mockTransaction);
@@ -217,30 +231,35 @@ describe('Corda Gateway', () => {
     });
 
     test('should include FATF reporting for transactions >= $1000', async () => {
-      const mockFlowHandle = { id: 'flow-123' };
       const mockFlowResult = { stateRef: 'state-ref-123', notarised: true };
 
-      mockClient.startFlow.mockResolvedValue(mockFlowHandle);
-      mockClient.getFlowProgress.mockResolvedValue({
-        finished: true,
-        result: mockFlowResult
+      // Mock invokeContractV1 for high-value transaction
+      mockClient.invokeContractV1.mockResolvedValue({
+        callData: {
+          flowId: 'flow-123',
+          success: true,
+          stateRef: 'state-ref-123',
+          result: mockFlowResult
+        }
       });
 
       await gateway.submitTransaction(mockTransaction);
 
-      expect(mockClient.startFlow).toHaveBeenCalledWith(
+      expect(mockClient.invokeContractV1).toHaveBeenCalledWith(
         expect.objectContaining({
-          flowArgs: expect.objectContaining({
-            fatfReporting: expect.objectContaining({
-              travelRule: true,
-              originatorInfo: expect.objectContaining({
-                name: 'HSBC Bank'
-              }),
-              beneficiaryInfo: expect.objectContaining({
-                name: 'Barclays Bank'
+          params: expect.arrayContaining([
+            expect.objectContaining({
+              fatfReporting: expect.objectContaining({
+                travelRule: true,
+                originatorInfo: expect.objectContaining({
+                  name: 'HSBC Bank'
+                }),
+                beneficiaryInfo: expect.objectContaining({
+                  name: 'Barclays Bank'
+                })
               })
             })
-          })
+          ])
         })
       );
     });

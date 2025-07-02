@@ -134,6 +134,12 @@ class TCSBaNCSConnector {
    * Setup HTTP client interceptors for logging and error handling
    */
   setupInterceptors() {
+    // Guard clause for test environments where httpClient might be undefined
+    if (!this.httpClient || !this.httpClient.interceptors) {
+      logger.warn('HTTP client not properly initialized, skipping interceptor setup');
+      return;
+    }
+
     // Request interceptor
     this.httpClient.interceptors.request.use(
       async (config) => {
@@ -293,9 +299,8 @@ class TCSBaNCSConnector {
         scope: 'bancs:read bancs:write bancs:accounts bancs:payments'
       };
 
-      const response = await axios.post(`${this.config.baseUrl}/oauth/token`, authPayload, {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        timeout: this.config.timeout
+      const response = await this.httpClient.post('/oauth/token', authPayload, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
 
       this.accessToken = response.data.access_token;
@@ -353,10 +358,19 @@ class TCSBaNCSConnector {
     if (!this.config.encryptionKey) return data;
 
     try {
-      const cipher = crypto.createCipher('aes-256-cbc', this.config.encryptionKey);
+      const algorithm = 'aes-256-cbc';
+      const key = crypto.scryptSync(this.config.encryptionKey, 'salt', 32);
+      const iv = crypto.randomBytes(16);
+      
+      const cipher = crypto.createCipheriv(algorithm, key, iv);
       let encrypted = cipher.update(JSON.stringify(data), 'utf8', 'hex');
       encrypted += cipher.final('hex');
-      return { encrypted: true, data: encrypted };
+      
+      return { 
+        encrypted: true, 
+        data: encrypted,
+        iv: iv.toString('hex')
+      };
     } catch (error) {
       logger.warn('Data encryption failed, sending unencrypted', { error: error.message });
       return data;
@@ -367,10 +381,14 @@ class TCSBaNCSConnector {
    * Decrypt response data
    */
   decryptData(data) {
-    if (!data.encrypted || !this.config.encryptionKey) return data;
+    if (!data.encrypted || !this.config.encryptionKey || !data.iv) return data;
 
     try {
-      const decipher = crypto.createDecipher('aes-256-cbc', this.config.encryptionKey);
+      const algorithm = 'aes-256-cbc';
+      const key = crypto.scryptSync(this.config.encryptionKey, 'salt', 32);
+      const iv = Buffer.from(data.iv, 'hex');
+      
+      const decipher = crypto.createDecipheriv(algorithm, key, iv);
       let decrypted = decipher.update(data.data, 'hex', 'utf8');
       decrypted += decipher.final('utf8');
       return JSON.parse(decrypted);
