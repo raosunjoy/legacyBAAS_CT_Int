@@ -1,0 +1,980 @@
+openapi: 3.0.3
+info:
+  title: Banking Legacy-to-Blockchain B2BaaS Platform API
+  description: |
+    Multi-ledger smart switching platform enabling banks to blockchain-enable legacy systems without replacement.
+    
+    ## Overview
+    The platform provides seamless integration between traditional banking systems (SWIFT, TCS BaNCS) and multiple blockchain networks (XRP, Corda, Ethereum L2, Algorand) with intelligent routing, compliance automation, and real-time analytics.
+    
+    ## Key Features
+    - **SWIFT Message Processing**: MT103/MT202 parsing and validation
+    - **Smart Routing**: AI-powered multi-criteria routing across blockchain networks
+    - **Multi-Blockchain Support**: XRP, Corda, Ethereum L2, Algorand (CBDC)
+    - **Core Banking Integration**: TCS BaNCS connector with real-time webhooks
+    - **Compliance Automation**: FATF, AML, sanctions screening
+    - **Real-time Analytics**: Transaction monitoring and performance metrics
+    - **CBDC Operations**: Central Bank Digital Currency support via Algorand
+    
+    ## Authentication
+    All API endpoints require OAuth2 authentication. Contact your administrator for client credentials.
+    
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: api-support@legacybaas.com
+  license:
+    name: Proprietary
+    url: https://legacybaas.com/license
+
+servers:
+  - url: https://api.legacybaas.com/v1
+    description: Production server
+  - url: https://sandbox.legacybaas.com/v1
+    description: Sandbox server
+  - url: http://localhost:3000/v1
+    description: Development server
+
+tags:
+  - name: Transactions
+    description: Cross-border payment and transaction operations
+  - name: SWIFT
+    description: SWIFT message processing and validation
+  - name: Routing
+    description: Smart routing engine operations
+  - name: Banking
+    description: Core banking system integration
+  - name: Analytics
+    description: Transaction analytics and monitoring
+  - name: Webhooks
+    description: Webhook management and notifications
+  - name: Admin
+    description: Administrative operations
+
+security:
+  - OAuth2: []
+
+paths:
+  /transactions:
+    post:
+      tags:
+        - Transactions
+      summary: Submit a new transaction
+      description: Submit a cross-border payment transaction for processing through the smart routing engine
+      operationId: submitTransaction
+      requestBody:
+        description: Transaction details
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionRequest'
+            examples:
+              mt103:
+                summary: SWIFT MT103 transaction
+                value:
+                  messageType: "MT103"
+                  amount: 50000
+                  currency: "USD"
+                  sender:
+                    account: "1234567890"
+                    name: "ACME Corporation"
+                    bic: "CHASUS33"
+                  receiver:
+                    account: "0987654321"
+                    name: "Beta Industries"
+                    bic: "DEUTDEFF"
+                  remittanceInfo: "Invoice payment INV-2023-001"
+                  priority: "normal"
+      responses:
+        '201':
+          description: Transaction accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /transactions/{transactionId}:
+    get:
+      tags:
+        - Transactions
+      summary: Get transaction status
+      description: Retrieve the current status and details of a transaction
+      operationId: getTransaction
+      parameters:
+        - $ref: '#/components/parameters/TransactionId'
+      responses:
+        '200':
+          description: Transaction details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionDetails'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /swift/parse:
+    post:
+      tags:
+        - SWIFT
+      summary: Parse SWIFT message
+      description: Parse and validate a SWIFT MT message
+      operationId: parseSWIFT
+      requestBody:
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              example: |
+                {1:F01CHASUS33AXXX0000000000}
+                {2:I103DEUTDEFFXXXXN}
+                {4:
+                :20:REFERENCE123
+                :23B:CRED
+                :32A:230615USD50000,00
+                :50K:/1234567890
+                ACME CORPORATION
+                123 MAIN STREET
+                NEW YORK NY 10001
+                :59:/0987654321
+                BETA INDUSTRIES
+                456 INDUSTRIAL AVE
+                FRANKFURT 60311
+                :71A:OUR
+                -}
+      responses:
+        '200':
+          description: Parsed SWIFT message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParsedSWIFTMessage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /routing/calculate:
+    post:
+      tags:
+        - Routing
+      summary: Calculate optimal route
+      description: Calculate the optimal blockchain network route for a transaction
+      operationId: calculateRoute
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoutingRequest'
+      responses:
+        '200':
+          description: Routing recommendation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutingResponse'
+
+  /banking/accounts/{accountNumber}:
+    get:
+      tags:
+        - Banking
+      summary: Get account details
+      description: Retrieve account information from the core banking system
+      operationId: getAccountDetails
+      parameters:
+        - name: accountNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountDetails'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /banking/accounts/{accountNumber}/balance:
+    get:
+      tags:
+        - Banking
+      summary: Check account balance
+      description: Get current account balance from the core banking system
+      operationId: getAccountBalance
+      parameters:
+        - name: accountNumber
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: currency
+          in: query
+          schema:
+            type: string
+            pattern: '^[A-Z]{3}$'
+      responses:
+        '200':
+          description: Account balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+
+  /analytics/dashboard:
+    get:
+      tags:
+        - Analytics
+      summary: Get analytics dashboard data
+      description: Retrieve comprehensive analytics dashboard data
+      operationId: getDashboard
+      parameters:
+        - name: timeWindow
+          in: query
+          schema:
+            type: string
+            enum: [LAST_HOUR, LAST_24_HOURS, LAST_7_DAYS, LAST_30_DAYS]
+            default: LAST_24_HOURS
+        - name: layout
+          in: query
+          schema:
+            type: string
+            enum: [executive, operations, compliance, technical, cbdc]
+            default: executive
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardData'
+
+  /analytics/transactions/search:
+    post:
+      tags:
+        - Analytics
+      summary: Search transactions
+      description: Search historical transactions with advanced filters
+      operationId: searchTransactions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionSearchRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionSearchResponse'
+
+  /webhooks:
+    post:
+      tags:
+        - Webhooks
+      summary: Register webhook
+      description: Register a new webhook endpoint for notifications
+      operationId: registerWebhook
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookRegistration'
+      responses:
+        '201':
+          description: Webhook registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+
+  /webhooks/{webhookId}:
+    delete:
+      tags:
+        - Webhooks
+      summary: Delete webhook
+      description: Remove a registered webhook
+      operationId: deleteWebhook
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Webhook deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/health:
+    get:
+      tags:
+        - Admin
+      summary: Health check
+      description: Check platform health status
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Platform is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /admin/metrics:
+    get:
+      tags:
+        - Admin
+      summary: Get platform metrics
+      description: Retrieve platform performance metrics
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Platform metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformMetrics'
+
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /oauth/token
+          scopes:
+            read: Read access to resources
+            write: Write access to resources
+            admin: Administrative access
+
+  parameters:
+    TransactionId:
+      name: transactionId
+      in: path
+      description: Unique transaction identifier
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    TransactionRequest:
+      type: object
+      required:
+        - messageType
+        - amount
+        - currency
+        - sender
+        - receiver
+      properties:
+        messageType:
+          type: string
+          enum: [MT103, MT202]
+          description: SWIFT message type
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Transaction amount
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          description: ISO 4217 currency code
+        sender:
+          $ref: '#/components/schemas/Party'
+        receiver:
+          $ref: '#/components/schemas/Party'
+        remittanceInfo:
+          type: string
+          maxLength: 140
+          description: Payment reference information
+        priority:
+          type: string
+          enum: [normal, urgent, critical]
+          default: normal
+        complianceOverrides:
+          type: object
+          properties:
+            skipSanctionsCheck:
+              type: boolean
+              default: false
+            requireManualReview:
+              type: boolean
+              default: false
+
+    Party:
+      type: object
+      required:
+        - account
+        - name
+      properties:
+        account:
+          type: string
+          description: Account number
+        name:
+          type: string
+          description: Account holder name
+        bic:
+          type: string
+          pattern: '^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$'
+          description: BIC/SWIFT code
+        address:
+          type: object
+          properties:
+            street:
+              type: string
+            city:
+              type: string
+            country:
+              type: string
+              pattern: '^[A-Z]{2}$'
+
+    TransactionResponse:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [accepted, processing, completed, failed, rejected]
+        routingDecision:
+          type: object
+          properties:
+            network:
+              type: string
+              enum: [xrp-ledger, corda, ethereum-l2, algorand]
+            reason:
+              type: string
+            estimatedTime:
+              type: integer
+              description: Estimated processing time in seconds
+            estimatedCost:
+              type: number
+              format: double
+        timestamp:
+          type: string
+          format: date-time
+
+    TransactionDetails:
+      allOf:
+        - $ref: '#/components/schemas/TransactionResponse'
+        - type: object
+          properties:
+            blockchainDetails:
+              type: object
+              properties:
+                networkTransactionId:
+                  type: string
+                blockNumber:
+                  type: integer
+                confirmations:
+                  type: integer
+            complianceStatus:
+              type: object
+              properties:
+                sanctionsCheck:
+                  type: string
+                  enum: [passed, failed, pending]
+                amlScore:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                manualReviewRequired:
+                  type: boolean
+            timeline:
+              type: array
+              items:
+                type: object
+                properties:
+                  event:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+                  details:
+                    type: string
+
+    ParsedSWIFTMessage:
+      type: object
+      properties:
+        messageType:
+          type: string
+        sender:
+          type: object
+          properties:
+            bic:
+              type: string
+            name:
+              type: string
+        receiver:
+          type: object
+          properties:
+            bic:
+              type: string
+            name:
+              type: string
+        transactionReference:
+          type: string
+        valueDate:
+          type: string
+          format: date
+        amount:
+          type: number
+          format: double
+        currency:
+          type: string
+        orderingCustomer:
+          $ref: '#/components/schemas/Party'
+        beneficiaryCustomer:
+          $ref: '#/components/schemas/Party'
+        remittanceInfo:
+          type: string
+        charges:
+          type: string
+          enum: [OUR, SHA, BEN]
+
+    RoutingRequest:
+      type: object
+      required:
+        - amount
+        - currency
+        - senderCountry
+        - receiverCountry
+      properties:
+        amount:
+          type: number
+          format: double
+        currency:
+          type: string
+        senderCountry:
+          type: string
+          pattern: '^[A-Z]{2}$'
+        receiverCountry:
+          type: string
+          pattern: '^[A-Z]{2}$'
+        priority:
+          type: string
+          enum: [normal, urgent, critical]
+        complianceRequirements:
+          type: array
+          items:
+            type: string
+            enum: [fatf_reporting, sanctions_screening, aml_check]
+
+    RoutingResponse:
+      type: object
+      properties:
+        recommendedNetwork:
+          type: string
+          enum: [xrp-ledger, corda, ethereum-l2, algorand]
+        alternativeNetworks:
+          type: array
+          items:
+            type: string
+        routingScore:
+          type: object
+          properties:
+            speed:
+              type: integer
+              minimum: 0
+              maximum: 100
+            cost:
+              type: integer
+              minimum: 0
+              maximum: 100
+            compliance:
+              type: integer
+              minimum: 0
+              maximum: 100
+            overall:
+              type: integer
+              minimum: 0
+              maximum: 100
+        estimatedProcessing:
+          type: object
+          properties:
+            time:
+              type: integer
+              description: Seconds
+            cost:
+              type: number
+              format: double
+            gasEstimate:
+              type: string
+
+    AccountDetails:
+      type: object
+      properties:
+        accountNumber:
+          type: string
+        accountName:
+          type: string
+        accountType:
+          type: string
+          enum: [SAVINGS, CURRENT, LOAN, DEPOSIT]
+        accountStatus:
+          type: string
+          enum: [ACTIVE, INACTIVE, SUSPENDED, CLOSED]
+        currency:
+          type: string
+        branch:
+          type: object
+          properties:
+            code:
+              type: string
+            name:
+              type: string
+        customer:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            type:
+              type: string
+              enum: [INDIVIDUAL, CORPORATE]
+        lastUpdated:
+          type: string
+          format: date-time
+
+    BalanceResponse:
+      type: object
+      properties:
+        accountNumber:
+          type: string
+        currency:
+          type: string
+        currentBalance:
+          type: number
+          format: double
+        availableBalance:
+          type: number
+          format: double
+        holdAmount:
+          type: number
+          format: double
+        overdraftLimit:
+          type: number
+          format: double
+        timestamp:
+          type: string
+          format: date-time
+
+    DashboardData:
+      type: object
+      properties:
+        timeWindow:
+          type: string
+        transactionOverview:
+          type: object
+          properties:
+            totalVolume:
+              type: number
+            totalCount:
+              type: integer
+            successRate:
+              type: number
+            averageProcessingTime:
+              type: number
+        networkDistribution:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              count:
+                type: integer
+              volume:
+                type: number
+              percentage:
+                type: number
+        performanceMetrics:
+          type: object
+          properties:
+            throughput:
+              type: number
+            latency:
+              type: object
+              properties:
+                p50:
+                  type: number
+                p95:
+                  type: number
+                p99:
+                  type: number
+        complianceMetrics:
+          type: object
+          properties:
+            flaggedTransactions:
+              type: integer
+            manualReviews:
+              type: integer
+            sanctionsHits:
+              type: integer
+            averageAmlScore:
+              type: number
+
+    TransactionSearchRequest:
+      type: object
+      properties:
+        filters:
+          type: object
+          properties:
+            dateRange:
+              type: object
+              properties:
+                from:
+                  type: string
+                  format: date-time
+                to:
+                  type: string
+                  format: date-time
+            status:
+              type: array
+              items:
+                type: string
+            networks:
+              type: array
+              items:
+                type: string
+            amountRange:
+              type: object
+              properties:
+                min:
+                  type: number
+                max:
+                  type: number
+            currency:
+              type: string
+        sort:
+          type: object
+          properties:
+            field:
+              type: string
+              enum: [timestamp, amount, status]
+            order:
+              type: string
+              enum: [asc, desc]
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              minimum: 1
+            pageSize:
+              type: integer
+              minimum: 10
+              maximum: 100
+
+    TransactionSearchResponse:
+      type: object
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionDetails'
+        pagination:
+          type: object
+          properties:
+            currentPage:
+              type: integer
+            totalPages:
+              type: integer
+            totalRecords:
+              type: integer
+
+    WebhookRegistration:
+      type: object
+      required:
+        - url
+        - events
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            type: string
+            enum: 
+              - transaction.created
+              - transaction.completed
+              - transaction.failed
+              - compliance.alert
+              - network.status
+        secret:
+          type: string
+          description: HMAC secret for webhook signature verification
+        active:
+          type: boolean
+          default: true
+
+    WebhookResponse:
+      type: object
+      properties:
+        webhookId:
+          type: string
+          format: uuid
+        url:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        uptime:
+          type: integer
+          description: Uptime in seconds
+        components:
+          type: object
+          properties:
+            database:
+              type: string
+              enum: [healthy, unhealthy]
+            redis:
+              type: string
+              enum: [healthy, unhealthy]
+            blockchainNetworks:
+              type: object
+              additionalProperties:
+                type: string
+                enum: [connected, disconnected]
+
+    PlatformMetrics:
+      type: object
+      properties:
+        transactions:
+          type: object
+          properties:
+            total:
+              type: integer
+            successful:
+              type: integer
+            failed:
+              type: integer
+            pending:
+              type: integer
+        performance:
+          type: object
+          properties:
+            requestsPerSecond:
+              type: number
+            averageResponseTime:
+              type: number
+            errorRate:
+              type: number
+        system:
+          type: object
+          properties:
+            cpuUsage:
+              type: number
+            memoryUsage:
+              type: number
+            activeConnections:
+              type: integer
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: unauthorized
+              message:
+                type: string
+                example: Invalid or missing authentication token
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: not_found
+              message:
+                type: string
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: validation_error
+              errors:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    field:
+                      type: string
+                    message:
+                      type: string
+
+    ServiceUnavailable:
+      description: Service temporarily unavailable
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: service_unavailable
+              message:
+                type: string
+              retryAfter:
+                type: integer
+                description: Seconds to wait before retry

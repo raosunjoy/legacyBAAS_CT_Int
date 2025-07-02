@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LegacyBaaS API Documentation</title>
+    <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        .header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 300;
+        }
+        .header p {
+            margin: 0.5rem 0 0 0;
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        .nav-bar {
+            background: #f5f5f5;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+        }
+        .nav-links a {
+            color: #333;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+        .nav-links a:hover {
+            color: #2a5298;
+        }
+        .environment-selector {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        .environment-selector select {
+            padding: 0.5rem 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+            font-size: 14px;
+        }
+        .info-banner {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 1rem 2rem;
+            margin: 2rem;
+            border-radius: 4px;
+        }
+        .info-banner h3 {
+            margin: 0 0 0.5rem 0;
+            color: #1976d2;
+        }
+        .info-banner p {
+            margin: 0;
+            color: #555;
+        }
+        #swagger-ui {
+            margin: 2rem;
+        }
+        .swagger-ui .topbar {
+            display: none;
+        }
+        .quick-links {
+            background: #f9f9f9;
+            padding: 2rem;
+            margin: 2rem;
+            border-radius: 8px;
+        }
+        .quick-links h3 {
+            margin-top: 0;
+        }
+        .quick-links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .quick-link-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        .quick-link-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: #2a5298;
+        }
+        .quick-link-card h4 {
+            margin: 0 0 0.5rem 0;
+            color: #2a5298;
+        }
+        .quick-link-card p {
+            margin: 0;
+            color: #666;
+            font-size: 14px;
+        }
+        .footer {
+            background: #333;
+            color: white;
+            padding: 2rem;
+            text-align: center;
+            margin-top: 4rem;
+        }
+        .footer a {
+            color: #64b5f6;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>LegacyBaaS API Documentation</h1>
+        <p>Banking Legacy-to-Blockchain B2BaaS Platform</p>
+    </div>
+
+    <div class="nav-bar">
+        <div class="nav-links">
+            <a href="#overview">Overview</a>
+            <a href="#authentication">Authentication</a>
+            <a href="#endpoints">Endpoints</a>
+            <a href="#examples">Examples</a>
+            <a href="https://github.com/raosunjoy/LegacyBAAS" target="_blank">GitHub</a>
+        </div>
+        <div class="environment-selector">
+            <label for="env-select">Environment:</label>
+            <select id="env-select" onchange="changeEnvironment(this.value)">
+                <option value="https://api.legacybaas.com/v1">Production</option>
+                <option value="https://sandbox.legacybaas.com/v1">Sandbox</option>
+                <option value="http://localhost:3000/v1" selected>Development</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="info-banner">
+        <h3>🚀 Welcome to LegacyBaaS API v1.0</h3>
+        <p>This platform enables seamless integration between traditional banking systems and multiple blockchain networks. 
+           Explore our API endpoints below to submit transactions, parse SWIFT messages, and leverage intelligent routing.</p>
+    </div>
+
+    <div class="quick-links">
+        <h3>Quick Links</h3>
+        <div class="quick-links-grid">
+            <div class="quick-link-card" onclick="scrollToOperation('submitTransaction')">
+                <h4>Submit Transaction</h4>
+                <p>POST /transactions - Submit cross-border payments with smart routing</p>
+            </div>
+            <div class="quick-link-card" onclick="scrollToOperation('parseSWIFT')">
+                <h4>Parse SWIFT</h4>
+                <p>POST /swift/parse - Parse and validate MT103/MT202 messages</p>
+            </div>
+            <div class="quick-link-card" onclick="scrollToOperation('getDashboard')">
+                <h4>Analytics Dashboard</h4>
+                <p>GET /analytics/dashboard - Real-time transaction analytics</p>
+            </div>
+            <div class="quick-link-card" onclick="scrollToOperation('healthCheck')">
+                <h4>Health Check</h4>
+                <p>GET /admin/health - Check platform status and connectivity</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="swagger-ui"></div>
+
+    <div class="footer">
+        <p>© 2025 LegacyBaaS Platform | <a href="mailto:api-support@legacybaas.com">API Support</a> | <a href="https://status.legacybaas.com">Status Page</a></p>
+    </div>
+
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.9.0/swagger-ui-standalone-preset.js"></script>
+    <script>
+        let ui;
+
+        window.onload = function() {
+            ui = SwaggerUIBundle({
+                url: "./openapi.yaml",
+                dom_id: '#swagger-ui',
+                deepLinking: true,
+                persistAuthorization: true,
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "BaseLayout",
+                defaultModelsExpandDepth: 1,
+                defaultModelExpandDepth: 1,
+                displayRequestDuration: true,
+                filter: true,
+                showExtensions: true,
+                showCommonExtensions: true,
+                tryItOutEnabled: true,
+                validatorUrl: null,
+                onComplete: function() {
+                    // Add custom styling after Swagger UI loads
+                    const info = document.querySelector('.info');
+                    if (info) {
+                        info.style.display = 'none';
+                    }
+                }
+            });
+
+            window.ui = ui;
+        };
+
+        function changeEnvironment(url) {
+            if (ui) {
+                // Update the server URL in the spec
+                const spec = ui.spec().toJS();
+                if (spec.servers && spec.servers.length > 0) {
+                    // Find the selected server
+                    const selectedServer = spec.servers.find(s => s.url === url);
+                    if (selectedServer) {
+                        // Move selected server to the front
+                        spec.servers = [selectedServer, ...spec.servers.filter(s => s.url !== url)];
+                        ui.specActions.updateSpec(JSON.stringify(spec));
+                    }
+                }
+            }
+        }
+
+        function scrollToOperation(operationId) {
+            const element = document.querySelector(`[id*="${operationId}"]`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // Expand the operation
+                const button = element.querySelector('.opblock-summary-control');
+                if (button && !element.classList.contains('is-open')) {
+                    button.click();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
