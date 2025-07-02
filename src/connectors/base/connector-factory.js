@@ -502,7 +502,9 @@ class BankingConnectorFactory extends EventEmitter {
     
     for (const connectors of this.connectors.values()) {
       for (const connector of connectors) {
-        cleanupPromises.push(connector.cleanup());
+        if (typeof connector.cleanup === 'function') {
+          cleanupPromises.push(connector.cleanup());
+        }
       }
     }
 

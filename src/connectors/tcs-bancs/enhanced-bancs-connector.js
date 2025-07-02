@@ -613,6 +613,135 @@ class EnhancedTCSBaNCSConnector extends BaseBankingConnector {
       throw new Error('Transaction amount must be greater than zero');
     }
   }
+
+  /**
+   * Generate webhook signature
+   * @param {string} payload 
+   * @returns {string}
+   */
+  generateWebhookSignature(payload) {
+    if (!this.bancsConfig.webhookSecret) return null;
+
+    return crypto
+      .createHmac('sha256', this.bancsConfig.webhookSecret)
+      .update(payload)
+      .digest('hex');
+  }
+
+  /**
+   * Verify webhook signature
+   * @param {string} payload 
+   * @param {string} signature 
+   * @returns {boolean}
+   */
+  verifyWebhookSignature(payload, signature) {
+    const expectedSignature = this.generateWebhookSignature(payload);
+    return expectedSignature === signature;
+  }
+
+  /**
+   * Process webhook notification
+   * @param {Object} notification 
+   */
+  processWebhookNotification(notification) {
+    this.emit('webhook:notification', notification);
+
+    // Emit specific event based on notification type
+    if (notification.event === 'payment.completed') {
+      this.emit('payment:completed', notification.data);
+    } else if (notification.event === 'payment.failed') {
+      this.emit('payment:failed', notification.data);
+    } else if (notification.event === 'account.updated') {
+      this.emit('account:updated', notification.data);
+    }
+  }
+
+  /**
+   * Map error to standard error codes
+   * @param {Error} error 
+   * @returns {string}
+   */
+  mapErrorCode(error) {
+    const message = error.message?.toLowerCase() || '';
+
+    if (message.includes('credentials') || message.includes('authentication') || message.includes('unauthorized')) {
+      return ERROR_CODES.AUTHENTICATION_FAILED;
+    }
+    if (message.includes('insufficient funds') || message.includes('balance')) {
+      return ERROR_CODES.INSUFFICIENT_FUNDS;
+    }
+    if (message.includes('account') && (message.includes('invalid') || message.includes('not found'))) {
+      return ERROR_CODES.INVALID_ACCOUNT;
+    }
+    if (message.includes('timeout') || message.includes('network')) {
+      return ERROR_CODES.TIMEOUT_ERROR;
+    }
+    if (message.includes('compliance') || message.includes('sanction')) {
+      return ERROR_CODES.COMPLIANCE_FAILURE;
+    }
+
+    return ERROR_CODES.GENERAL_ERROR;
+  }
+
+  /**
+   * Get health status
+   * @returns {Promise<Object>}
+   */
+  async getHealthStatus() {
+    const isConnected = await this.testConnection();
+    
+    return {
+      status: isConnected ? 'healthy' : 'unhealthy',
+      bankCode: this.config.bankCode,
+      bankName: this.config.bankName,
+      isConnected,
+      connectionId: this.connectionId,
+      lastCheck: new Date().toISOString(),
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Get connector status
+   * @returns {Object}
+   */
+  getStatus() {
+    return {
+      bankCode: this.config.bankCode,
+      bankName: this.config.bankName,
+      isConnected: this.isConnected,
+      connectionId: this.connectionId,
+      metrics: this.metrics,
+      activeTransactions: this.activeTransactions.size,
+      completedTransactions: this.metrics.transactionsProcessed || 0,
+      configuration: {
+        baseUrl: this.bancsConfig.baseUrl,
+        institutionId: this.bancsConfig.institutionId,
+        branchCode: this.bancsConfig.branchCode,
+        enableEncryption: this.config.enableEncryption,
+        enableSignatures: this.config.enableSignatures
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Cleanup resources
+   * @returns {Promise<void>}
+   */
+  async cleanup() {
+    // Clear authentication
+    this.accessToken = null;
+    this.tokenExpiry = null;
+
+    // Clear HTTP client
+    if (this.httpClient) {
+      this.httpClient = null;
+    }
+
+    // Call parent cleanup
+    await super.cleanup();
+  }
 }
 
 module.exports = {

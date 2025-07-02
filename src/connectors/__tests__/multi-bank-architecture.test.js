@@ -94,7 +94,10 @@ describe('Multi-Bank Architecture', () => {
           }
         });
 
-        await factory.registerBank(bankConfig.bankCode, bankConfig);
+        await factory.registerBank(bankConfig.bankCode, {
+          ...bankConfig.config,
+          type: bankConfig.type
+        });
         
         expect(factory.connectorConfigs.has(bankConfig.bankCode)).toBe(true);
         expect(factory.connectors.has(bankConfig.bankCode)).toBe(true);
@@ -130,7 +133,10 @@ describe('Multi-Bank Architecture', () => {
           }
         });
 
-        await factory.registerBank(bankConfig.bankCode, bankConfig);
+        await factory.registerBank(bankConfig.bankCode, {
+          ...bankConfig.config,
+          type: bankConfig.type
+        });
         
         expect(eventSpy).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -705,7 +711,10 @@ describe('Multi-Bank Integration Tests', () => {
 
     // Register both banks
     for (const config of mockConfigs) {
-      await factory.registerBank(config.bankCode, config);
+      await factory.registerBank(config.bankCode, {
+        ...config.config,
+        type: config.type
+      });
     }
 
     // Verify both banks are registered
