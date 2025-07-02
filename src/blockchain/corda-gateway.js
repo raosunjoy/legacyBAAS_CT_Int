@@ -262,7 +262,7 @@ class CordaGateway extends BaseBlockchainGateway {
       
       logger.info('Corda transaction submitted successfully', {
         transactionId: transaction.id,
-        flowId: flowHandle.id,
+        flowId: flowResponse.callData?.flowId || 'unknown',
         stateRefs: result.stateRefs,
         status: result.status
       });
@@ -365,25 +365,39 @@ class CordaGateway extends BaseBlockchainGateway {
 
       // Use stored node info and make simplified health checks
       const nodeInfo = this.nodeInfo || { platformVersion: 4.8, legalIdentities: [] };
-      const networkMap = []; // Network map not directly available via connector
-      const flows = this.activeFlows.size; // Use our tracked flows
+      let networkMap = [];
+      let flows = this.activeFlows.size; // Use our tracked flows
+      
+      // Try to get network map and flows if available
+      try {
+        if (this.cordaClient.networkMap) {
+          networkMap = await this.cordaClient.networkMap();
+        }
+        if (this.cordaClient.listFlows) {
+          const flowList = await this.cordaClient.listFlows();
+          flows = flowList.length;
+        }
+      } catch (error) {
+        // Ignore errors, use defaults
+      }
+
+      const vaultSize = await this.getVaultSize();
+      const isHealthy = 
+        this.isConnected && // We are connected
+        networkMap.length > 0 && // Network map available
+        flows < 1000 && // Not overwhelmed with flows
+        nodeInfo.platformVersion >= 4.0; // Recent Corda version
 
       const health = {
         networkType: this.networkType,
-        isHealthy: true,
+        isHealthy: isHealthy,
         nodeVersion: nodeInfo.platformVersion,
         legalIdentities: nodeInfo.legalIdentities.length,
-        networkNodes: 1, // At least our node
+        networkNodes: Math.max(networkMap.length, 1), // At least our node
         activeFlows: flows,
-        vaultSize: await this.getVaultSize(),
+        vaultSize: vaultSize,
         timestamp: new Date().toISOString()
       };
-
-      // Determine if network is healthy
-      health.isHealthy = 
-        this.isConnected && // We are connected
-        flows < 1000 && // Not overwhelmed with flows
-        nodeInfo.platformVersion >= 4.0; // Recent Corda version
 
       return health;
       
@@ -570,20 +584,26 @@ class CordaGateway extends BaseBlockchainGateway {
     }
     
     try {
-      // In real implementation, we would query the network map
-      // For now, create a mock party based on the name
-      const party = {
-        legalIdentities: [{
-          name: `O=${cacheKey},L=London,C=GB`,
-          owningKey: 'mock-key-' + Math.random().toString(36).substr(2, 9)
-        }]
-      };
+      // Query the network map for the party
+      let party = null;
+      if (this.cordaClient && this.cordaClient.networkMap) {
+        const networkMap = await this.cordaClient.networkMap();
+        for (const node of networkMap) {
+          for (const identity of node.legalIdentities || []) {
+            if (identity.name.includes(cacheKey)) {
+              party = identity;
+              break;
+            }
+          }
+          if (party) break;
+        }
+      }
       
       if (!party) {
         if (this.config.testMode) {
           // Return test party
           const testParty = {
-            name: `O=${cacheKey},L=TestCity,C=GB`,
+            name: `O=Unknown Bank,L=London,C=GB`,
             owningKey: 'test-key-' + Math.random().toString(36).substr(2, 9)
           };
           this.partyCache.set(cacheKey, testParty);
@@ -592,9 +612,9 @@ class CordaGateway extends BaseBlockchainGateway {
         throw new Error(`Cannot resolve Corda party for ${cacheKey}`);
       }
       
-      const resolvedParty = party.legalIdentities[0];
-      this.partyCache.set(cacheKey, resolvedParty);
-      return resolvedParty;
+      // Cache and return the resolved party
+      this.partyCache.set(cacheKey, party);
+      return party;
       
     } catch (error) {
       logger.error('Failed to resolve Corda party', {

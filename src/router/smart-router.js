@@ -88,6 +88,7 @@ class SmartRouter extends EventEmitter {
     this.networkGateways = new Map();
     this.routingHistory = [];
     this.networkMetrics = new Map();
+    this.startTime = Date.now();
     
     // Initialize default routing rules
     this.initializeDefaultRules();
@@ -137,6 +138,7 @@ class SmartRouter extends EventEmitter {
         targetNetwork: routingDecision.targetNetwork,
         routingFactors,
         decision: routingDecision,
+        complianceFlags: transaction.compliance || routingFactors.compliance,
         timestamp: new Date().toISOString(),
         processingTime: Date.now() - startTime,
         status: 'routed'
@@ -452,8 +454,29 @@ class SmartRouter extends EventEmitter {
    * @returns {Object} Final routing decision
    */
   resolveRoutingConflicts(decisions, factors) {
-    if (decisions.length === 0) {
-      // Fallback to default network
+    // Filter decisions to only include networks with registered and connected gateways
+    const availableDecisions = decisions.filter(decision => {
+      const gateway = this.networkGateways.get(decision.targetNetwork);
+      return gateway && gateway.isConnected !== false;
+    });
+
+    if (availableDecisions.length === 0) {
+      // Fallback to first connected registered gateway if available
+      const connectedNetworks = Array.from(this.networkGateways.keys()).filter(network => {
+        const gateway = this.networkGateways.get(network);
+        return gateway && gateway.isConnected !== false;
+      });
+      
+      if (connectedNetworks.length > 0) {
+        return {
+          targetNetwork: connectedNetworks[0],
+          reason: 'Fallback to connected gateway',
+          confidence: 0.5,
+          priority: 10
+        };
+      }
+      
+      // Original fallback if no gateways registered
       return {
         targetNetwork: this.config.defaultNetwork,
         reason: 'Default network fallback',
@@ -462,12 +485,12 @@ class SmartRouter extends EventEmitter {
       };
     }
 
-    if (decisions.length === 1) {
-      return decisions[0];
+    if (availableDecisions.length === 1) {
+      return availableDecisions[0];
     }
 
     // Sort by priority (highest first) and confidence
-    decisions.sort((a, b) => {
+    availableDecisions.sort((a, b) => {
       if (a.priority !== b.priority) {
         return b.priority - a.priority;
       }
@@ -475,12 +498,12 @@ class SmartRouter extends EventEmitter {
     });
 
     // Return highest priority decision
-    const winner = decisions[0];
+    const winner = availableDecisions[0];
     
     logger.info('Routing conflict resolved', {
-      totalDecisions: decisions.length,
+      totalDecisions: availableDecisions.length,
       winningDecision: winner,
-      allDecisions: decisions
+      allDecisions: availableDecisions
     });
 
     return winner;
@@ -663,6 +686,52 @@ class SmartRouter extends EventEmitter {
   registerGateway(network, gateway) {
     this.networkGateways.set(network, gateway);
     logger.info('Network gateway registered', { network });
+  }
+
+  /**
+   * Get a registered blockchain network gateway
+   * @param {string} network - Network identifier
+   * @returns {Object} Gateway instance
+   */
+  getGateway(network) {
+    const gateway = this.networkGateways.get(network);
+    if (!gateway) {
+      throw new Error(`No gateway registered for network: ${network}`);
+    }
+    return gateway;
+  }
+
+  /**
+   * Get router metrics
+   * @returns {Object} Router metrics
+   */
+  getMetrics() {
+    const totalTransactions = this.routingHistory.length;
+    const successfulRoutes = this.routingHistory.filter(route => route.status === 'routed').length;
+    const averageProcessingTime = totalTransactions > 0 
+      ? this.routingHistory.reduce((sum, route) => sum + route.processingTime, 0) / totalTransactions 
+      : 0;
+
+    return {
+      totalTransactions,
+      successfulRoutes,
+      averageProcessingTime: Math.round(averageProcessingTime),
+      networkDistribution: this.getNetworkDistribution(),
+      uptime: Date.now() - this.startTime
+    };
+  }
+
+  /**
+   * Get network distribution statistics
+   * @returns {Object} Network distribution
+   */
+  getNetworkDistribution() {
+    const distribution = {};
+    for (const route of this.routingHistory) {
+      const network = route.targetNetwork;
+      distribution[network] = (distribution[network] || 0) + 1;
+    }
+    return distribution;
   }
 
   /**

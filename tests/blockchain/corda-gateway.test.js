@@ -35,6 +35,8 @@ describe('Corda Gateway', () => {
       getFlowProgress: jest.fn(),
       flowStatus: jest.fn(),
       flowKill: jest.fn(),
+      killFlow: jest.fn(),
+      listFlows: jest.fn(),
       networkHealthCheck: jest.fn(),
       partyFromX500Name: jest.fn(),
       getFlowsForTransactionType: jest.fn(),
@@ -206,7 +208,8 @@ describe('Corda Gateway', () => {
           flowId: 'flow-123',
           success: true,
           stateRef: 'state-ref-123',
-          result: mockFlowResult
+          stateRefs: ['state-ref-123'],
+          notarised: true
         }
       });
 
@@ -215,17 +218,17 @@ describe('Corda Gateway', () => {
       expect(result.id).toBe('state-ref-123');
       expect(result.status).toBe(TRANSACTION_STATUS.CONFIRMED);
       expect(result.notarised).toBe(true);
-      expect(mockClient.startFlow).toHaveBeenCalledWith(
+      expect(mockClient.invokeContractV1).toHaveBeenCalledWith(
         expect.objectContaining({
-          flowClassName: CORDA_FLOW_TYPES.PAYMENT,
-          flowArgs: expect.objectContaining({
+          flowFullClassName: CORDA_FLOW_TYPES.PAYMENT,
+          params: [expect.objectContaining({
             amount: expect.objectContaining({
               quantity: 5000000, // 50000 * 100
               token: expect.objectContaining({
                 currency: 'GBP'
               })
             })
-          })
+          })]
         })
       );
     });
@@ -266,38 +269,36 @@ describe('Corda Gateway', () => {
 
     test('should include regulatory reporting for high-value transactions', async () => {
       const highValueTx = { ...mockTransaction, amount: 15000 };
-      const mockFlowHandle = { id: 'flow-123' };
       const mockFlowResult = { stateRef: 'state-ref-123', notarised: true };
 
-      mockClient.startFlow.mockResolvedValue(mockFlowHandle);
-      mockClient.getFlowProgress.mockResolvedValue({
-        finished: true,
-        result: mockFlowResult
+      mockClient.invokeContractV1.mockResolvedValue({
+        callData: {
+          flowId: 'flow-123',
+          success: true,
+          stateRef: 'state-ref-123',
+          result: mockFlowResult
+        }
       });
 
       await gateway.submitTransaction(highValueTx);
 
-      expect(mockClient.startFlow).toHaveBeenCalledWith(
+      expect(mockClient.invokeContractV1).toHaveBeenCalledWith(
         expect.objectContaining({
-          flowArgs: expect.objectContaining({
+          params: [expect.objectContaining({
             regulatoryReporting: expect.objectContaining({
               reportingRequirement: 'SUSPICIOUS_ACTIVITY',
               jurisdictions: ['GB', 'EU'],
               thresholdAmount: 10000
             })
-          })
+          })]
         })
       );
     });
 
     test('should handle flow execution failure', async () => {
-      const mockFlowHandle = { id: 'flow-123' };
-      
-      mockClient.startFlow.mockResolvedValue(mockFlowHandle);
-      mockClient.getFlowProgress.mockResolvedValue({
-        finished: true,
-        error: 'Insufficient funds'
-      });
+      mockClient.invokeContractV1.mockRejectedValue(
+        new Error('Flow failed: Insufficient funds')
+      );
 
       await expect(gateway.submitTransaction(mockTransaction)).rejects.toThrow('Flow failed: Insufficient funds');
       expect(gateway.activeFlows.has(mockTransaction.id)).toBe(false);
@@ -305,16 +306,17 @@ describe('Corda Gateway', () => {
 
     test('should handle flow timeout', async () => {
       gateway.config.flowTimeout = 100; // Very short timeout
-      const mockFlowHandle = { id: 'flow-123' };
       
-      mockClient.startFlow.mockResolvedValue(mockFlowHandle);
-      mockClient.getFlowProgress.mockResolvedValue({
-        finished: false,
-        progress: 0.5
+      mockClient.invokeContractV1.mockImplementation(({ timeoutMs }) => {
+        return new Promise((resolve, reject) => {
+          setTimeout(() => {
+            reject(new Error('Flow timeout after ' + timeoutMs + 'ms'));
+          }, timeoutMs + 10); // Slightly longer than timeout to simulate timeout
+        });
       });
 
-      await expect(gateway.submitTransaction(mockTransaction)).rejects.toThrow('Flow timeout after 100ms');
-    });
+      await expect(gateway.submitTransaction(mockTransaction)).rejects.toThrow('Flow timeout');
+    }, 1000); // Set Jest timeout to 1 second
 
     test('should throw error when not connected', async () => {
       gateway.cordaClient = null;
@@ -324,20 +326,22 @@ describe('Corda Gateway', () => {
 
     test('should handle trade finance transactions', async () => {
       const tradeTransaction = { ...mockTransaction, tradeFinance: true };
-      const mockFlowHandle = { id: 'flow-123' };
       const mockFlowResult = { stateRef: 'state-ref-123', notarised: true };
 
-      mockClient.startFlow.mockResolvedValue(mockFlowHandle);
-      mockClient.getFlowProgress.mockResolvedValue({
-        finished: true,
-        result: mockFlowResult
+      mockClient.invokeContractV1.mockResolvedValue({
+        callData: {
+          flowId: 'flow-123',
+          success: true,
+          stateRef: 'state-ref-123',
+          result: mockFlowResult
+        }
       });
 
       await gateway.submitTransaction(tradeTransaction);
 
-      expect(mockClient.startFlow).toHaveBeenCalledWith(
+      expect(mockClient.invokeContractV1).toHaveBeenCalledWith(
         expect.objectContaining({
-          flowClassName: CORDA_FLOW_TYPES.TRADE_FINANCE
+          flowFullClassName: CORDA_FLOW_TYPES.TRADE_FINANCE
         })
       );
     });

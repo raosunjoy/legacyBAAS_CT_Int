@@ -16,6 +16,11 @@ class MockBlockchainGateway extends BaseBlockchainGateway {
     super(networkType, { testMode: true });
     this.mockConnected = false;
     this.mockTransactions = new Map();
+    this.mockMetrics = {
+      totalTransactions: 0,
+      successfulTransactions: 0,
+      failedTransactions: 0
+    };
   }
 
   async connect() {
@@ -49,6 +54,8 @@ class MockBlockchainGateway extends BaseBlockchainGateway {
     // Track the transaction in the base gateway's history
     this.trackTransaction(transaction.id, result);
     this.mockTransactions.set(transaction.id, result);
+    this.mockMetrics.totalTransactions++;
+    this.mockMetrics.successfulTransactions++;
     return result;
   }
 
@@ -80,6 +87,14 @@ class MockBlockchainGateway extends BaseBlockchainGateway {
       isHealthy: true,
       latency: 50 + Math.random() * 100,
       blockNumber: 1000000,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  getMetrics() {
+    return {
+      ...this.mockMetrics,
+      averageProcessingTime: 50,
       timestamp: new Date().toISOString()
     };
   }
@@ -283,9 +298,12 @@ DEUTDEFFXXX
     test('should handle routing failures with fallback', async () => {
       const transaction = {
         id: 'FALLBACK-TEST-123',
+        messageType: 'MT103',
         amount: 15000,
         currency: 'USD',
-        urgency: 'high'
+        urgency: 'high',
+        sender: { name: 'Test Bank A', account: '123456' },
+        receiver: { name: 'Test Bank B', account: '654321' }
       };
 
       // Simulate primary network failure
@@ -295,7 +313,7 @@ DEUTDEFFXXX
         enableFallback: true
       });
 
-      expect(routingDecision.success).toBe(true);
+      expect(routingDecision.status).toBe('routed');
       expect(routingDecision.targetNetwork).toBe('ethereum-polygon'); // Should use fallback
 
       // Restore connection
@@ -305,8 +323,11 @@ DEUTDEFFXXX
     test('should maintain transaction history across failures', async () => {
       const transaction = {
         id: 'HISTORY-TEST-456',
+        messageType: 'MT103',
         amount: 5000,
-        currency: 'GBP'
+        currency: 'GBP',
+        sender: { name: 'Test Bank C', account: '789012' },
+        receiver: { name: 'Test Bank D', account: '210987' }
       };
 
       const routingDecision = await smartRouter.route(transaction);
@@ -334,9 +355,9 @@ DEUTDEFFXXX
 
       // Process a batch of transactions
       const transactions = [
-        { id: 'PERF-1', amount: 1000, currency: 'USD' },
-        { id: 'PERF-2', amount: 2500, currency: 'EUR' },
-        { id: 'PERF-3', amount: 8000, currency: 'GBP' }
+        { id: 'PERF-1', messageType: 'MT103', amount: 1000, currency: 'USD', sender: { name: 'Bank 1', account: '001' }, receiver: { name: 'Bank 2', account: '002' } },
+        { id: 'PERF-2', messageType: 'MT103', amount: 2500, currency: 'EUR', sender: { name: 'Bank 3', account: '003' }, receiver: { name: 'Bank 4', account: '004' } },
+        { id: 'PERF-3', messageType: 'MT103', amount: 8000, currency: 'GBP', sender: { name: 'Bank 5', account: '005' }, receiver: { name: 'Bank 6', account: '006' } }
       ];
 
       for (const tx of transactions) {
@@ -369,6 +390,7 @@ DEUTDEFFXXX
       // High-value transaction requiring compliance
       const highValueTx = {
         id: 'COMPLIANCE-789',
+        messageType: 'MT103',
         amount: 50000,
         currency: 'USD',
         sender: {
@@ -393,7 +415,7 @@ DEUTDEFFXXX
         requireDocumentation: true
       });
 
-      expect(routingDecision.success).toBe(true);
+      expect(routingDecision.status).toBe('routed');
       expect(routingDecision.complianceFlags).toMatchObject({
         amlRequired: true,
         fatfReporting: true,
