@@ -191,8 +191,19 @@ class BaNCSWebhookHandler extends EventEmitter {
       });
     });
     
-    // Error handling middleware
+    // JSON parsing error handling middleware
     this.app.use((error, req, res, next) => {
+      if (error instanceof SyntaxError && error.status === 400 && 'body' in error) {
+        logger.warn('Malformed JSON payload', {
+          requestId: req.requestId,
+          error: error.message
+        });
+        return res.status(400).json({
+          error: 'Invalid JSON payload',
+          requestId: req.requestId
+        });
+      }
+      
       logger.error('Webhook handler error', {
         requestId: req.requestId,
         error: error.message,
@@ -349,9 +360,10 @@ class BaNCSWebhookHandler extends EventEmitter {
       return false;
     }
     
+    const body = req.rawBody || Buffer.from(JSON.stringify(req.body));
     const expectedSignature = crypto
       .createHmac('sha256', this.config.webhookSecret)
-      .update(req.rawBody)
+      .update(body)
       .digest('hex');
     
     const providedSignature = signature.replace('sha256=', '');

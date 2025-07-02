@@ -473,7 +473,13 @@ describe('BaNCS Webhook Handler', () => {
         id: 'webhook-duplicate',
         event_type: WEBHOOK_EVENTS.TRANSACTION_STATUS_CHANGED,
         timestamp: '2023-12-01T10:00:00Z',
-        data: { transaction_id: 'TXN001' }
+        data: { 
+          transaction_id: 'TXN001',
+          old_status: 'PENDING',
+          new_status: 'CONFIRMED',
+          status_reason: 'Transaction processed successfully',
+          updated_at: '2023-12-01T10:00:00Z'
+        }
       };
 
       const payloadString = JSON.stringify(payload);
