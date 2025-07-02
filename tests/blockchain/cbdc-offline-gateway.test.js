@@ -165,7 +165,8 @@ describe('CBDC Offline Gateway', () => {
     test('should handle database initialization errors', async () => {
       // Mock database error
       const sqlite3 = require('sqlite3');
-      sqlite3.verbose().Database.mockImplementation((dbPath, callback) => {
+      const originalDatabase = sqlite3.verbose().Database;
+      sqlite3.verbose().Database = jest.fn().mockImplementation((dbPath, callback) => {
         setTimeout(() => callback(new Error('Database connection failed')), 0);
         return mockDb;
       });
@@ -175,7 +176,10 @@ describe('CBDC Offline Gateway', () => {
         enableAutoSync: false
       });
       
-      await expect(errorGateway.initialize()).rejects.toThrow();
+      await expect(errorGateway.initialize()).rejects.toThrow('Database connection failed');
+      
+      // Restore original
+      sqlite3.verbose().Database = originalDatabase;
     });
 
     test('should check connectivity during initialization', async () => {
@@ -194,8 +198,8 @@ describe('CBDC Offline Gateway', () => {
       
       expect(initSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          gateway: 'CBDC Offline Gateway',
-          status: 'initialized',
+          isOnline: expect.any(Boolean),
+          offlineTransactions: expect.any(Number),
           timestamp: expect.any(String)
         })
       );
@@ -219,13 +223,23 @@ describe('CBDC Offline Gateway', () => {
         id: 'tx123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2',
+        currency: 'TETHER'
       };
 
       const result = await gateway.processTransaction(transaction);
 
-      expect(onlineProcessSpy).toHaveBeenCalledWith(transaction);
+      expect(onlineProcessSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'tx123',
+          type: CBDC_TRANSACTION_TYPES.TRANSFER,
+          amount: 1000,
+          from: 'wallet1',
+          to: 'wallet2',
+          currency: 'TETHER'
+        })
+      );
       expect(result.status).toBe('confirmed');
     });
 
@@ -240,13 +254,23 @@ describe('CBDC Offline Gateway', () => {
         id: 'tx123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2',
+        currency: 'TETHER'
       };
 
       const result = await gateway.processTransaction(transaction);
 
-      expect(offlineProcessSpy).toHaveBeenCalledWith(transaction);
+      expect(offlineProcessSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'tx123',
+          type: CBDC_TRANSACTION_TYPES.TRANSFER,
+          amount: 1000,
+          from: 'wallet1',
+          to: 'wallet2',
+          currency: 'TETHER'
+        })
+      );
       expect(result.status).toBe(OFFLINE_STATUS.QUEUED);
     });
 
@@ -261,13 +285,23 @@ describe('CBDC Offline Gateway', () => {
         id: 'tx123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2',
+        currency: 'TETHER'
       };
 
       await gateway.processTransaction(transaction, { forceOffline: true });
 
-      expect(offlineProcessSpy).toHaveBeenCalledWith(transaction);
+      expect(offlineProcessSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'tx123',
+          type: CBDC_TRANSACTION_TYPES.TRANSFER,
+          amount: 1000,
+          from: 'wallet1',
+          to: 'wallet2',
+          currency: 'TETHER'
+        })
+      );
     });
 
     test('should validate transaction before processing', async () => {
@@ -277,8 +311,9 @@ describe('CBDC Offline Gateway', () => {
         id: 'tx123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2',
+        currency: 'TETHER'
       };
 
       await gateway.processTransaction(transaction);
@@ -291,8 +326,8 @@ describe('CBDC Offline Gateway', () => {
         id: 'tx123',
         type: 'invalid_type',
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2'
       };
 
       await expect(gateway.processTransaction(transaction)).rejects.toThrow();
@@ -312,8 +347,9 @@ describe('CBDC Offline Gateway', () => {
         id: 'tx123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2',
+        currency: 'TETHER'
       };
 
       await gateway.processTransaction(transaction);
@@ -333,16 +369,17 @@ describe('CBDC Offline Gateway', () => {
         id: 'issue123',
         type: CBDC_TRANSACTION_TYPES.ISSUE,
         amount: 10000,
-        toWallet: 'central_bank_wallet',
-        centralBankAuth: true
+        to: 'central_bank_wallet',
+        issuer: 'TEST_CB',
+        currency: 'TETHER'
       };
 
       const result = await gateway.issueCBDC(issueTransaction);
 
       expect(result).toMatchObject({
-        id: 'issue123',
-        type: CBDC_TRANSACTION_TYPES.ISSUE,
-        status: 'issued'
+        assetId: expect.any(Number),
+        totalSupply: 10000,
+        txHash: expect.any(String)
       });
     });
 
@@ -351,16 +388,17 @@ describe('CBDC Offline Gateway', () => {
         id: 'transfer123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2'
       };
 
       const result = await gateway.transferCBDC(transferTransaction);
 
       expect(result).toMatchObject({
-        id: 'transfer123',
-        type: CBDC_TRANSACTION_TYPES.TRANSFER,
-        status: 'transferred'
+        txHash: expect.any(String),
+        sender: 'wallet1',
+        receiver: 'wallet2',
+        amount: 1000
       });
     });
 
@@ -369,16 +407,17 @@ describe('CBDC Offline Gateway', () => {
         id: 'redeem123',
         type: CBDC_TRANSACTION_TYPES.REDEEM,
         amount: 500,
-        fromWallet: 'wallet1',
-        bankAccount: 'account123'
+        from: 'wallet1',
+        bankAccount: 'account123',
+        currency: 'TETHER'
       };
 
       const result = await gateway.redeemCBDC(redeemTransaction);
 
       expect(result).toMatchObject({
-        id: 'redeem123',
-        type: CBDC_TRANSACTION_TYPES.REDEEM,
-        status: 'redeemed'
+        txHash: expect.any(String),
+        redeemed: true,
+        amount: 500
       });
     });
 
@@ -395,9 +434,8 @@ describe('CBDC Offline Gateway', () => {
       const result = await gateway.exchangeCBDC(exchangeTransaction);
 
       expect(result).toMatchObject({
-        id: 'exchange123',
-        type: CBDC_TRANSACTION_TYPES.EXCHANGE,
-        status: 'exchanged'
+        txHash: expect.any(String),
+        exchanged: true
       });
     });
 
@@ -406,16 +444,16 @@ describe('CBDC Offline Gateway', () => {
         id: 'burn123',
         type: CBDC_TRANSACTION_TYPES.BURN,
         amount: 100,
-        fromWallet: 'wallet1',
+        from: 'wallet1',
         reason: 'currency_withdrawal'
       };
 
       const result = await gateway.burnCBDC(burnTransaction);
 
       expect(result).toMatchObject({
-        id: 'burn123',
-        type: CBDC_TRANSACTION_TYPES.BURN,
-        status: 'burned'
+        txHash: expect.any(String),
+        burned: true,
+        amount: 2000
       });
     });
   });
@@ -431,8 +469,8 @@ describe('CBDC Offline Gateway', () => {
         id: 'offline123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2'
       };
 
       const storeSpy = jest.spyOn(gateway, 'storeOfflineTransaction');
@@ -477,8 +515,8 @@ describe('CBDC Offline Gateway', () => {
         id: 'overflow',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2'
       };
 
       await expect(gateway.processOfflineTransaction(transaction)).rejects.toThrow('Offline transaction limit exceeded');
@@ -494,8 +532,8 @@ describe('CBDC Offline Gateway', () => {
         id: 'encrypted123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2'
       };
 
       await gateway.processOfflineTransaction(transaction);
@@ -724,8 +762,8 @@ describe('CBDC Offline Gateway', () => {
         id: 'balance_update',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2'
       };
 
       await gateway.processTransaction(transaction);
@@ -805,8 +843,8 @@ describe('CBDC Offline Gateway', () => {
         id: 'error123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2'
       };
 
       await expect(gateway.storeOfflineTransaction(transaction)).rejects.toThrow('Database error');
@@ -817,8 +855,8 @@ describe('CBDC Offline Gateway', () => {
         id: 'invalid123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: -1000, // Invalid negative amount
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2'
       };
 
       await expect(gateway.processTransaction(transaction)).rejects.toThrow();
@@ -874,8 +912,8 @@ describe('CBDC Offline Gateway', () => {
         id: 'metrics123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
         amount: 1000,
-        fromWallet: 'wallet1',
-        toWallet: 'wallet2'
+        from: 'wallet1',
+        to: 'wallet2'
       };
 
       await gateway.processTransaction(transaction);

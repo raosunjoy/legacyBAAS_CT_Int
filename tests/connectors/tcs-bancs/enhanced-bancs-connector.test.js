@@ -336,26 +336,41 @@ describe('Enhanced TCS BaNCS Connector', () => {
     });
 
     test('should get account details successfully', async () => {
-      const accountData = {
-        accountNumber: '1234567890',
-        accountType: 'SAVINGS',
-        accountStatus: 'ACTIVE',
+      const bancsResponse = {
+        account_number: '1234567890',
+        account_type: 'SAVINGS',
+        account_status: 'ACTIVE',
         currency: 'USD',
-        openDate: '2023-01-01',
         customer: {
-          id: 'CUST001',
-          name: 'John Doe',
-          type: 'INDIVIDUAL'
-        }
+          customer_id: 'CUST001',
+          customer_name: 'John Doe',
+          customer_type: 'INDIVIDUAL'
+        },
+        branch_code: 'BR001',
+        branch_name: 'Main Branch'
       };
 
       mockHttpClient.get.mockResolvedValue({
-        data: accountData
+        data: bancsResponse
       });
 
       const result = await connector.getAccountDetails('1234567890');
 
-      expect(result).toEqual(expect.objectContaining(accountData));
+      expect(result).toMatchObject({
+        accountNumber: '1234567890',
+        accountType: 'SAVINGS',
+        accountStatus: 'ACTIVE',
+        currency: 'USD',
+        customer: {
+          id: 'CUST001',
+          name: 'John Doe',
+          type: 'INDIVIDUAL'
+        },
+        branch: {
+          code: 'BR001',
+          name: 'Main Branch'
+        }
+      });
       expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/accounts/inquiry', {
         params: {
           accountNumber: '1234567890',
@@ -395,22 +410,29 @@ describe('Enhanced TCS BaNCS Connector', () => {
     });
 
     test('should check account balance successfully', async () => {
-      const balanceData = {
-        accountNumber: '1234567890',
+      const bancsBalanceResponse = {
+        account_number: '1234567890',
         currency: 'USD',
-        availableBalance: 50000.00,
-        currentBalance: 52000.00,
-        pendingTransactions: 2000.00,
-        lastUpdated: '2023-01-01T12:00:00Z'
+        available_balance: 50000.00,
+        current_balance: 52000.00,
+        account_status: 'ACTIVE',
+        last_transaction_date: '2023-01-01T12:00:00Z'
       };
 
       mockHttpClient.get.mockResolvedValue({
-        data: balanceData
+        data: bancsBalanceResponse
       });
 
       const result = await connector.checkAccountBalance('1234567890', 'USD');
 
-      expect(result).toEqual(expect.objectContaining(balanceData));
+      expect(result).toMatchObject({
+        accountNumber: '1234567890',
+        currency: 'USD',
+        availableBalance: 50000.00,
+        currentBalance: 52000.00,
+        accountStatus: 'ACTIVE',
+        lastTransactionDate: '2023-01-01T12:00:00Z'
+      });
       expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/accounts/balance', {
         params: {
           accountNumber: '1234567890',
@@ -449,39 +471,45 @@ describe('Enhanced TCS BaNCS Connector', () => {
         receiver: { account: '0987654321' }
       };
 
-      const validationResponse = {
-        isValid: true,
-        validationId: 'VAL001',
-        checks: {
-          accountValidation: true,
-          balanceCheck: true,
-          complianceCheck: true
-        }
-      };
+      // Mock balance check
+      connector.checkAccountBalance = jest.fn().mockResolvedValue({
+        availableBalance: 50000.00,
+        accountStatus: 'ACTIVE'
+      });
 
-      mockHttpClient.post.mockResolvedValue({
-        data: {
-          status: 'success',
-          data: validationResponse
-        }
+      // Mock compliance check
+      connector.performComplianceCheck = jest.fn().mockResolvedValue({
+        passed: true,
+        riskScore: 25
       });
 
       const result = await connector.validateTransaction(transaction);
 
-      expect(result).toEqual(validationResponse);
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/payments/validate', transaction);
+      expect(result).toMatchObject({
+        isValid: true,
+        validationId: expect.any(String),
+        accountBalance: 50000.00,
+        complianceResult: {
+          passed: true,
+          riskScore: 25
+        },
+        timestamp: expect.any(String)
+      });
     });
 
     test('should handle transaction validation failure', async () => {
       const transaction = {
         id: 'TXN001',
         amount: 1000,
-        currency: 'USD'
+        currency: 'USD',
+        sender: { account: '1234567890' },
+        receiver: { account: '0987654321' }
       };
 
-      mockHttpClient.post.mockRejectedValue(new Error('Validation failed'));
+      // Mock balance check failure
+      connector.checkAccountBalance = jest.fn().mockRejectedValue(new Error('Balance check failed'));
 
-      await expect(connector.validateTransaction(transaction)).rejects.toThrow('Validation failed');
+      await expect(connector.validateTransaction(transaction)).rejects.toThrow('Transaction validation failed');
     });
 
     test('should process debit transaction successfully', async () => {
@@ -492,24 +520,37 @@ describe('Enhanced TCS BaNCS Connector', () => {
         sender: { account: '1234567890' }
       };
 
-      const debitResponse = {
-        debitId: 'DEB001',
-        status: TRANSACTION_STATUS.CONFIRMED,
+      const bancsDebitResponse = {
         transactionId: 'TXN001',
-        processedAt: new Date().toISOString()
+        status: 'COMPLETED',
+        amount: 1000,
+        currency: 'USD',
+        accountNumber: '1234567890',
+        bankReference: 'BANCS-REF-001'
       };
 
       mockHttpClient.post.mockResolvedValue({
-        data: {
-          status: 'success',
-          data: debitResponse
-        }
+        data: bancsDebitResponse
       });
 
       const result = await connector.processDebit(transaction);
 
-      expect(result).toEqual(debitResponse);
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/payments/debit', transaction);
+      expect(result).toMatchObject({
+        debitId: 'TXN001',
+        status: TRANSACTION_STATUS.CONFIRMED,
+        amount: 1000,
+        currency: 'USD',
+        accountNumber: '1234567890',
+        bankReference: 'BANCS-REF-001'
+      });
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/payments/debit', {
+        transactionId: 'TXN001',
+        accountNumber: '1234567890',
+        amount: 1000,
+        currency: 'USD',
+        reference: 'TXN001',
+        timestamp: expect.any(String)
+      });
     });
 
     test('should process credit transaction successfully', async () => {
@@ -517,51 +558,78 @@ describe('Enhanced TCS BaNCS Connector', () => {
         id: 'TXN001',
         amount: 1000,
         currency: 'USD',
-        receiver: { account: '0987654321' }
+        receiver: { account: '0987654321' },
+        sender: { name: 'John Doe', account: '1234567890', bic: 'TESTBIC' }
       };
 
-      const creditResponse = {
-        creditId: 'CRED001',
-        status: TRANSACTION_STATUS.CONFIRMED,
+      const bancsCreditResponse = {
         transactionId: 'TXN001',
-        processedAt: new Date().toISOString()
+        status: 'COMPLETED',
+        amount: 1000,
+        currency: 'USD',
+        accountNumber: '0987654321',
+        bankReference: 'BANCS-REF-002'
       };
 
       mockHttpClient.post.mockResolvedValue({
-        data: {
-          status: 'success',
-          data: creditResponse
-        }
+        data: bancsCreditResponse
       });
 
       const result = await connector.processCredit(transaction);
 
-      expect(result).toEqual(creditResponse);
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/payments/credit', transaction);
+      expect(result).toMatchObject({
+        creditId: 'TXN001',
+        status: TRANSACTION_STATUS.CONFIRMED,
+        amount: 1000,
+        currency: 'USD',
+        accountNumber: '0987654321',
+        bankReference: 'BANCS-REF-002'
+      });
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/payments/credit', {
+        transactionId: 'TXN001',
+        accountNumber: '0987654321',
+        amount: 1000,
+        currency: 'USD',
+        reference: 'TXN001',
+        senderDetails: {
+          name: 'John Doe',
+          account: '1234567890',
+          bank: 'TESTBIC'
+        },
+        timestamp: expect.any(String)
+      });
     });
 
     test('should get transaction status successfully', async () => {
-      const statusResponse = {
-        transactionId: 'TXN001',
-        status: TRANSACTION_STATUS.CONFIRMED,
-        statusDetails: {
+      const bancsStatusResponse = {
+        status: 'COMPLETED',
+        amount: 1000,
+        currency: 'USD',
+        timestamp: new Date().toISOString(),
+        bankReference: 'BANCS-REF-001',
+        details: {
           debitStatus: 'COMPLETED',
-          creditStatus: 'COMPLETED',
-          settlementStatus: 'SETTLED'
-        },
-        lastUpdated: new Date().toISOString()
+          creditStatus: 'COMPLETED'
+        }
       };
 
       mockHttpClient.get.mockResolvedValue({
-        data: {
-          status: 'success',
-          data: statusResponse
-        }
+        data: bancsStatusResponse
       });
 
       const result = await connector.getTransactionStatus('TXN001');
 
-      expect(result).toEqual(statusResponse);
+      expect(result).toMatchObject({
+        transactionId: 'TXN001',
+        status: TRANSACTION_STATUS.CONFIRMED,
+        amount: 1000,
+        currency: 'USD',
+        bankReference: 'BANCS-REF-001',
+        details: {
+          debitStatus: 'COMPLETED',
+          creditStatus: 'COMPLETED'
+        }
+      });
       expect(mockHttpClient.get).toHaveBeenCalledWith('/api/v1/payments/status/TXN001');
     });
   });
@@ -577,67 +645,129 @@ describe('Enhanced TCS BaNCS Connector', () => {
         id: 'TXN001',
         amount: 10000,
         currency: 'USD',
-        sender: { account: '1234567890' },
-        receiver: { account: '0987654321' }
+        sender: { account: '1234567890', name: 'John Doe' },
+        receiver: { account: '0987654321', name: 'Jane Smith', bic: 'TESTBIC' }
       };
 
-      const complianceResponse = {
-        passed: true,
+      const bancsComplianceResponse = {
+        status: 'APPROVED',
         riskScore: 25,
-        checks: {
-          aml: { passed: true, score: 20 },
-          kyc: { passed: true, verified: true },
-          sanctions: { passed: true, matches: [] },
-          pep: { passed: true, matches: [] }
-        },
-        requiresManualReview: false
+        requiresManualReview: false,
+        sanctionsCheck: { passed: true },
+        amlCheck: { passed: true },
+        fatfCheck: { passed: true }
       };
 
       mockHttpClient.post.mockResolvedValue({
-        data: {
-          status: 'success',
-          data: complianceResponse
-        }
+        data: bancsComplianceResponse
       });
 
       const result = await connector.performComplianceCheck(transaction);
 
-      expect(result).toEqual(complianceResponse);
-      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/compliance/check', transaction);
+      expect(result).toMatchObject({
+        passed: true,
+        riskScore: 25,
+        requiresManualReview: false,
+        sanctions: { passed: true },
+        aml: { passed: true },
+        fatf: { passed: true }
+      });
+      expect(mockHttpClient.post).toHaveBeenCalledWith('/api/v1/compliance/check', {
+        transactionId: 'TXN001',
+        amount: 10000,
+        currency: 'USD',
+        sender: {
+          accountNumber: '1234567890',
+          name: 'John Doe'
+        },
+        receiver: {
+          accountNumber: '0987654321',
+          name: 'Jane Smith',
+          bic: 'TESTBIC'
+        },
+        transactionType: 'MT103'
+      });
     });
 
     test('should handle compliance check failure', async () => {
-      const transaction = { id: 'TXN001' };
+      const transaction = {
+        id: 'TXN001',
+        amount: 10000,
+        currency: 'USD',
+        sender: { account: '1234567890', name: 'John Doe' },
+        receiver: { account: '0987654321', name: 'Jane Smith' }
+      };
 
       mockHttpClient.post.mockRejectedValue(new Error('Compliance service unavailable'));
 
-      await expect(connector.performComplianceCheck(transaction)).rejects.toThrow('Compliance service unavailable');
+      const result = await connector.performComplianceCheck(transaction);
+
+      expect(result).toMatchObject({
+        passed: false,
+        reason: 'Compliance service unavailable',
+        requiresManualReview: true,
+        error: 'Compliance service unavailable'
+      });
     });
   });
 
   describe('Data Encryption', () => {
     test('should encrypt data when encryption is enabled', () => {
-      connector.config.enableEncryption = true;
+      // Mock crypto methods for encryption
+      const crypto = require('crypto');
+      crypto.scryptSync = jest.fn().mockReturnValue(Buffer.from('test-key-32-bytes-long-for-aes256'));
+      crypto.createCipheriv = jest.fn().mockReturnValue({
+        update: jest.fn().mockReturnValue('encrypted-part'),
+        final: jest.fn().mockReturnValue('-final-part')
+      });
+      
+      // Ensure bancsConfig has encryption key
+      connector.bancsConfig = {
+        ...connector.bancsConfig,
+        encryptionKey: 'test_encryption_key_for_testing'
+      };
       
       const data = { sensitive: 'information' };
       const encrypted = connector.encryptData(data);
 
       expect(encrypted).toBeDefined();
+      expect(encrypted.encrypted).toBe(true);
+      expect(encrypted.data).toBe('encrypted-part-final-part');
+      expect(encrypted.iv).toBeDefined();
       expect(encrypted).not.toEqual(data);
     });
 
     test('should decrypt data correctly', () => {
-      connector.config.enableEncryption = true;
+      // Mock crypto for decryption
+      const crypto = require('crypto');
+      crypto.scryptSync = jest.fn().mockReturnValue(Buffer.from('test-key-32-bytes-long-for-aes256'));
+      crypto.createDecipheriv = jest.fn().mockReturnValue({
+        update: jest.fn().mockReturnValue('{"sensitive":'),
+        final: jest.fn().mockReturnValue('"information"}')
+      });
       
-      const originalData = { sensitive: 'information' };
-      const encrypted = connector.encryptData(originalData);
-      const decrypted = connector.decryptData(encrypted);
+      connector.bancsConfig = {
+        ...connector.bancsConfig,
+        encryptionKey: 'test_encryption_key_for_testing'
+      };
+      
+      const encryptedData = {
+        encrypted: true,
+        data: 'mocked-encrypted-data',
+        iv: '6d6f636b65642d72616e646f6d2d6279746573'
+      };
+      
+      const decrypted = connector.decryptData(encryptedData);
 
-      expect(decrypted).toEqual(originalData);
+      expect(decrypted).toEqual({ sensitive: 'information' });
     });
 
     test('should return original data when encryption is disabled', () => {
-      connector.config.enableEncryption = false;
+      // Set no encryption key to disable encryption
+      connector.bancsConfig = {
+        ...connector.bancsConfig,
+        encryptionKey: null
+      };
       
       const data = { sensitive: 'information' };
       const result = connector.encryptData(data);

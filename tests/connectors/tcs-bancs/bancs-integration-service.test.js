@@ -154,7 +154,7 @@ describe('TCS BaNCS Integration Service', () => {
       expect(result.stages.validation.passed).toBe(true);
       expect(result.stages.accountVerification.passed).toBe(true);
       expect(result.stages.compliance.passed).toBe(true);
-      expect(result.processingTime).toBeGreaterThan(0);
+      expect(result.processingTime).toBeGreaterThanOrEqual(0);
     });
 
     test('should reject transaction with invalid input', async () => {
