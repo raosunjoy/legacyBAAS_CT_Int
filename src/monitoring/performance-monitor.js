@@ -181,6 +181,8 @@ class PerformanceMonitor extends EventEmitter {
       logger.info('Performance monitoring started');
 
     } catch (error) {
+      this.isMonitoring = false;
+      this.monitoringStartTime = null;
       logger.error('Failed to start monitoring', { error: error.message });
       throw error;
     }
@@ -686,6 +688,291 @@ class PerformanceMonitor extends EventEmitter {
       default:
         throw new Error(`Unsupported export format: ${format}`);
     }
+  }
+
+  /**
+   * Perform comprehensive health checks
+   */
+  async performHealthChecks() {
+    const healthStatus = {
+      overall: 'healthy',
+      components: {
+        system: this.checkSystemHealth(),
+        connectors: await this.checkConnectorHealth(),
+        blockchain: await this.checkBlockchainHealth(),
+        compliance: this.checkComplianceMetrics()
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    // Determine overall health
+    const componentStatuses = Object.values(healthStatus.components);
+    if (componentStatuses.some(status => status === 'critical')) {
+      healthStatus.overall = 'critical';
+    } else if (componentStatuses.some(status => status === 'degraded')) {
+      healthStatus.overall = 'degraded';
+    }
+
+    this.lastHealthCheck = healthStatus;
+    return healthStatus;
+  }
+
+  /**
+   * Check system health based on resource usage
+   */
+  checkSystemHealth() {
+    if (this.systemMetrics.cpuUsage > 90 || this.systemMetrics.memoryUsage > 95) {
+      return 'critical';
+    } else if (this.systemMetrics.cpuUsage > 80 || this.systemMetrics.memoryUsage > 85) {
+      return 'degraded';
+    }
+    return 'healthy';
+  }
+
+  /**
+   * Check connector health
+   */
+  async checkConnectorHealth() {
+    // Mock implementation - integrate with actual connectors
+    const connectorMetrics = await this.getConnectorMetrics();
+    let overallHealth = 'healthy';
+    
+    for (const [connectorId, metrics] of connectorMetrics) {
+      if (metrics.health === 'critical') {
+        overallHealth = 'critical';
+        break;
+      } else if (metrics.health === 'degraded' && overallHealth === 'healthy') {
+        overallHealth = 'degraded';
+      }
+    }
+    
+    return overallHealth;
+  }
+
+  /**
+   * Check blockchain health
+   */
+  async checkBlockchainHealth() {
+    // Mock implementation - integrate with actual blockchain gateways
+    const blockchainMetrics = await this.getBlockchainMetrics();
+    let overallHealth = 'healthy';
+    
+    for (const [network, metrics] of blockchainMetrics) {
+      if (metrics.health === 'critical') {
+        overallHealth = 'critical';
+        break;
+      } else if (metrics.health === 'degraded' && overallHealth === 'healthy') {
+        overallHealth = 'degraded';
+      }
+    }
+    
+    return overallHealth;
+  }
+
+  /**
+   * Check compliance metrics
+   */
+  checkComplianceMetrics() {
+    const complianceFailureRate = this.systemMetrics.complianceAlerts / Math.max(this.systemMetrics.totalTransactions, 1);
+    
+    if (complianceFailureRate > this.alertThresholds.complianceFailureRate) {
+      return 'critical';
+    }
+    return 'healthy';
+  }
+
+  /**
+   * Check health-related alerts
+   */
+  checkHealthAlerts(healthStatus) {
+    if (healthStatus.overall === 'critical') {
+      this.createAlert({
+        id: 'system_health_critical',
+        title: 'System Health Critical',
+        description: 'Overall system health is critical',
+        severity: ALERT_SEVERITY.CRITICAL,
+        metric: 'system_health',
+        currentValue: healthStatus.overall,
+        threshold: 'healthy',
+        category: 'health'
+      });
+    }
+  }
+
+  /**
+   * Process active alerts
+   */
+  async processActiveAlerts() {
+    // Process alert escalation, auto-resolution, etc.
+    for (const [alertId, alert] of this.activeAlerts) {
+      // Auto-resolve alerts that are no longer triggered
+      if (this.shouldAutoResolveAlert(alert)) {
+        this.resolveAlert(alertId);
+      }
+    }
+  }
+
+  /**
+   * Check if alert should be auto-resolved
+   */
+  shouldAutoResolveAlert(alert) {
+    // Simple auto-resolution logic
+    switch (alert.id) {
+      case 'high_cpu_usage':
+        return this.systemMetrics.cpuUsage < alert.threshold;
+      case 'high_memory_usage':
+        return this.systemMetrics.memoryUsage < alert.threshold;
+      case 'high_disk_usage':
+        return this.systemMetrics.diskUsage < alert.threshold;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Resolve an alert
+   */
+  resolveAlert(alertId) {
+    const alert = this.activeAlerts.get(alertId);
+    if (alert) {
+      alert.status = 'resolved';
+      alert.resolvedAt = new Date().toISOString();
+      this.activeAlerts.delete(alertId);
+      this.alertHistory.push({ ...alert, action: 'resolved' });
+      
+      this.emit('alert:resolved', alert);
+      
+      logger.info('Alert resolved', {
+        alertId: alert.alertId,
+        title: alert.title
+      });
+    }
+  }
+
+  /**
+   * Send webhook notification
+   */
+  async sendWebhookNotification(alert) {
+    // Mock implementation - replace with actual HTTP request
+    const payload = {
+      alert_id: alert.alertId,
+      title: alert.title,
+      description: alert.description,
+      severity: alert.severity,
+      timestamp: alert.createdAt,
+      current_value: alert.currentValue,
+      threshold: alert.threshold
+    };
+    
+    logger.debug('Webhook notification sent', { url: this.config.alertWebhookUrl, payload });
+  }
+
+  /**
+   * Send email notification
+   */
+  async sendEmailNotification(alert) {
+    // Mock implementation - replace with actual email service
+    const emailData = {
+      to: this.config.alertEmailRecipients,
+      subject: `Alert: ${alert.title}`,
+      body: `Alert Details:\n\nTitle: ${alert.title}\nDescription: ${alert.description}\nSeverity: ${alert.severity}\nTimestamp: ${alert.createdAt}`
+    };
+    
+    logger.debug('Email notification sent', { recipients: emailData.to, subject: emailData.subject });
+  }
+
+  /**
+   * Send Slack notification
+   */
+  async sendSlackNotification(alert) {
+    // Mock implementation - replace with actual Slack webhook
+    const slackPayload = {
+      text: `Alert: ${alert.title}`,
+      attachments: [{
+        color: this.getSlackColorForSeverity(alert.severity),
+        fields: [
+          { title: 'Description', value: alert.description },
+          { title: 'Severity', value: alert.severity },
+          { title: 'Current Value', value: alert.currentValue },
+          { title: 'Threshold', value: alert.threshold }
+        ]
+      }]
+    };
+    
+    logger.debug('Slack notification sent', { webhook: this.config.alertSlackWebhook, payload: slackPayload });
+  }
+
+  /**
+   * Get Slack color for alert severity
+   */
+  getSlackColorForSeverity(severity) {
+    switch (severity) {
+      case ALERT_SEVERITY.CRITICAL: return 'danger';
+      case ALERT_SEVERITY.HIGH: return 'warning';
+      case ALERT_SEVERITY.MEDIUM: return '#ff9500';
+      case ALERT_SEVERITY.LOW: return 'good';
+      default: return '#439FE0';
+    }
+  }
+
+  /**
+   * Export metrics in JSON format
+   */
+  exportJSONFormat() {
+    const metricsData = {};
+    
+    for (const [name, metric] of this.metrics.entries()) {
+      metricsData[name] = {
+        value: metric.value,
+        type: metric.type,
+        labels: metric.labels,
+        timestamp: metric.timestamp
+      };
+    }
+    
+    return JSON.stringify(metricsData, null, 2);
+  }
+
+  /**
+   * Export metrics in Prometheus format
+   */
+  exportPrometheusFormat() {
+    let output = '';
+    
+    for (const [name, metric] of this.metrics.entries()) {
+      const prometheusSafeName = name.replace(/[^a-zA-Z0-9_]/g, '_');
+      
+      // Add help comment
+      output += `# HELP ${prometheusSafeName} ${metric.name}\n`;
+      output += `# TYPE ${prometheusSafeName} ${metric.type}\n`;
+      
+      // Add metric with labels
+      const labelString = Object.entries(metric.labels || {})
+        .map(([key, value]) => `${key}="${value}"`)
+        .join(',');
+      
+      if (labelString) {
+        output += `${prometheusSafeName}{${labelString}} ${metric.value}\n`;
+      } else {
+        output += `${prometheusSafeName} ${metric.value}\n`;
+      }
+    }
+    
+    return output;
+  }
+
+  /**
+   * Export metrics in CSV format
+   */
+  exportCSVFormat() {
+    let output = 'metric,value,type,timestamp,labels\n';
+    
+    for (const [name, metric] of this.metrics.entries()) {
+      const labelsString = JSON.stringify(metric.labels || {});
+      output += `${name},${metric.value},${metric.type},${metric.timestamp},"${labelsString}"\n`;
+    }
+    
+    return output;
   }
 
   /**
