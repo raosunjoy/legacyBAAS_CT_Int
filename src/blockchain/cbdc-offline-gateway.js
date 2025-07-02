@@ -389,6 +389,9 @@ class CBDCOfflineGateway extends EventEmitter {
 
     return {
       txHash,
+      sender: transaction.from,
+      receiver: transaction.to,
+      amount: transaction.amount,
       blockNumber: Math.floor(Math.random() * 1000000),
       fees: 0.001
     };
@@ -415,6 +418,8 @@ class CBDCOfflineGateway extends EventEmitter {
 
     return {
       txHash,
+      redeemed: true,
+      amount: transaction.amount,
       blockNumber: Math.floor(Math.random() * 1000000),
       redemptionAmount: transaction.amount,
       fiatCurrency: transaction.fiatCurrency || 'USD',
@@ -436,6 +441,7 @@ class CBDCOfflineGateway extends EventEmitter {
 
     return {
       txHash,
+      exchanged: true,
       blockNumber: Math.floor(Math.random() * 1000000),
       inputAmount: transaction.amount,
       inputCurrency: this.config.cbdcCurrency,
@@ -464,6 +470,8 @@ class CBDCOfflineGateway extends EventEmitter {
 
     return {
       txHash,
+      burned: true,
+      amount: transaction.amount,
       blockNumber: Math.floor(Math.random() * 1000000),
       burnedAmount: transaction.amount,
       remainingSupply: this.metrics.circulatingSupply,
@@ -553,7 +561,10 @@ class CBDCOfflineGateway extends EventEmitter {
 
       return {
         status: 'completed',
-        ...syncResults,
+        processed: syncResults.totalTransactions,
+        successful: syncResults.syncedTransactions,
+        failed: syncResults.failedTransactions,
+        errors: syncResults.errors,
         syncDuration
       };
 
@@ -587,12 +598,19 @@ class CBDCOfflineGateway extends EventEmitter {
           timestamp: new Date().toISOString()
         });
 
-        if (this.isOnline && this.offlineQueue.length > 0) {
-          // Trigger sync when coming back online
-          setTimeout(() => this.syncOfflineTransactions(), 1000);
+        if (this.isOnline) {
+          this.emit('connected');
+          if (this.offlineQueue.length > 0 && this.config.autoSync) {
+            // Trigger sync when coming back online
+            this.emit('auto-sync:start');
+            setTimeout(() => this.syncOfflineTransactions(), 1000);
+          }
+        } else {
+          this.emit('disconnected');
         }
       }
 
+      this.lastConnectivityCheck = new Date().toISOString();
       return this.isOnline;
 
     } catch (error) {
@@ -667,7 +685,7 @@ class CBDCOfflineGateway extends EventEmitter {
     return new Promise((resolve, reject) => {
       this.offlineDb = new sqlite3.Database(this.config.offlineDbPath, (err) => {
         if (err) {
-          reject(err);
+          reject(new Error('Database connection failed: ' + err.message));
           return;
         }
 
@@ -800,7 +818,7 @@ class CBDCOfflineGateway extends EventEmitter {
 
   startSyncProcess() {
     // Periodic connectivity check and sync
-    setInterval(async () => {
+    this.syncInterval = setInterval(async () => {
       await this.checkConnectivity();
       
       if (this.isOnline && this.offlineQueue.length > 0 && !this.syncInProgress) {
@@ -929,6 +947,175 @@ class CBDCOfflineGateway extends EventEmitter {
         (this.metrics.averageOfflineTime * (this.metrics.offlineTransactions - 1) + duration) / 
         this.metrics.offlineTransactions;
     }
+  }
+
+  // Metrics and monitoring methods
+  getMetrics() {
+    return {
+      totalTransactions: this.metrics.totalTransactions,
+      offlineTransactions: this.metrics.offlineTransactions,
+      syncedTransactions: this.metrics.syncedTransactions,
+      failedSyncs: this.metrics.failedSyncs,
+      walletBalances: Object.fromEntries(this.metrics.walletBalances),
+      transactionVolume: Object.fromEntries(this.metrics.transactionVolume),
+      lastSyncTimestamp: this.metrics.lastSyncTimestamp,
+      encryptedTransactions: this.metrics.encryptedTransactions,
+      signedTransactions: this.metrics.signedTransactions
+    };
+  }
+
+  getHealthStatus() {
+    const metrics = this.getMetrics();
+    const offlineRate = metrics.totalTransactions > 0 
+      ? metrics.offlineTransactions / metrics.totalTransactions 
+      : 0;
+    
+    let status = 'healthy';
+    if (offlineRate > 0.5) status = 'degraded';
+    if (!this.isOnline) status = 'offline';
+    
+    return {
+      status,
+      isOnline: this.isOnline,
+      offlineQueueSize: this.offlineQueue.length,
+      metrics,
+      lastConnectivityCheck: this.lastConnectivityCheck
+    };
+  }
+
+  getPerformanceMetrics() {
+    const totalOffline = this.metrics.offlineTransactions;
+    const totalTransactions = this.metrics.totalTransactions;
+    const totalSynced = this.metrics.syncedTransactions;
+    const totalFailed = this.metrics.failedSyncs;
+    
+    return {
+      offlineRate: totalTransactions > 0 ? totalOffline / totalTransactions : 0,
+      syncSuccessRate: (totalSynced + totalFailed) > 0 
+        ? totalSynced / (totalSynced + totalFailed) 
+        : 0,
+      averageQueueSize: this.offlineQueue.length,
+      encryptionRate: totalTransactions > 0 
+        ? this.metrics.encryptedTransactions / totalTransactions 
+        : 0,
+      signatureRate: totalTransactions > 0 
+        ? this.metrics.signedTransactions / totalTransactions 
+        : 0
+    };
+  }
+
+  // Integration methods
+  async processAlgorandTransaction(transaction) {
+    // Placeholder for Algorand-specific processing
+    if (!this.config.enableAlgorandIntegration) {
+      throw new Error('Algorand integration not enabled');
+    }
+    
+    // In production, this would integrate with Algorand SDK
+    return {
+      txId: `algo-${transaction.id}`,
+      confirmed: true,
+      blockNumber: Date.now(),
+      network: 'algorand'
+    };
+  }
+
+  async processCrunchfishTransaction(transaction) {
+    // Placeholder for Crunchfish-specific processing
+    if (!this.config.enableCrunchfishIntegration) {
+      throw new Error('Crunchfish integration not enabled');
+    }
+    
+    // In production, this would integrate with Crunchfish SDK
+    return {
+      status: 'processed',
+      proximity: true,
+      deviceId: transaction.deviceId || 'unknown',
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  // Status method
+  getStatus() {
+    return {
+      gateway: 'CBDC Offline Gateway',
+      isOnline: this.isOnline,
+      isInitialized: this.isInitialized,
+      offlineQueueSize: this.offlineQueue.length,
+      syncInProgress: this.syncInProgress,
+      metrics: this.getMetrics()
+    };
+  }
+
+  // Wallet balance management
+  async getWalletBalance(walletAddress) {
+    const balance = this.metrics.walletBalances.get(walletAddress) || 0;
+    return {
+      wallet: walletAddress,
+      balance: balance,
+      currency: 'CBDC',
+      lastUpdated: new Date().toISOString()
+    };
+  }
+
+  // Encryption/Decryption methods (expose internal methods)
+  encryptTransactionData(data) {
+    if (!this.config.encryptionKey) {
+      throw new Error('Encryption key not configured');
+    }
+    const encrypted = this.encryptTransaction({ data });
+    return encrypted.data || encrypted;
+  }
+
+  decryptTransactionData(encryptedData) {
+    if (!this.config.encryptionKey) {
+      throw new Error('Encryption key not configured');
+    }
+    const decrypted = this.decryptTransaction({ data: encryptedData });
+    return decrypted.data || decrypted;
+  }
+
+  // Update wallet balance
+  updateWalletBalance(walletAddress, amount) {
+    const currentBalance = this.metrics.walletBalances.get(walletAddress) || 0;
+    const newBalance = currentBalance + amount;
+    this.metrics.walletBalances.set(walletAddress, newBalance);
+    
+    // Update transaction volume
+    const currentVolume = this.metrics.transactionVolume.get(walletAddress) || 0;
+    this.metrics.transactionVolume.set(walletAddress, currentVolume + Math.abs(amount));
+    
+    return newBalance;
+  }
+
+  // Cleanup method
+  async cleanup() {
+    // Clear intervals
+    if (this.syncInterval) {
+      clearInterval(this.syncInterval);
+      this.syncInterval = null;
+    }
+    
+    // Close database connection
+    if (this.offlineDb) {
+      await new Promise((resolve, reject) => {
+        this.offlineDb.close((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      this.offlineDb = null;
+    }
+    
+    // Clear queues and metrics
+    this.offlineQueue = [];
+    this.isInitialized = false;
+    this.isOnline = false;
+    
+    // Emit cleanup event
+    this.emit('cleanup', {
+      timestamp: new Date().toISOString()
+    });
   }
 }
 

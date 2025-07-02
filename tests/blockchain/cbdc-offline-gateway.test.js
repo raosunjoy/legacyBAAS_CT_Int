@@ -163,23 +163,17 @@ describe('CBDC Offline Gateway', () => {
     });
 
     test('should handle database initialization errors', async () => {
-      // Mock database error
-      const sqlite3 = require('sqlite3');
-      const originalDatabase = sqlite3.verbose().Database;
-      sqlite3.verbose().Database = jest.fn().mockImplementation((dbPath, callback) => {
-        setTimeout(() => callback(new Error('Database connection failed')), 0);
-        return mockDb;
-      });
-      
       const errorGateway = new CBDCOfflineGateway({
         offlineDbPath: ':memory:',
         enableAutoSync: false
       });
       
-      await expect(errorGateway.initialize()).rejects.toThrow('Database connection failed');
+      // Spy on initializeOfflineDatabase to throw an error
+      jest.spyOn(errorGateway, 'initializeOfflineDatabase').mockRejectedValue(
+        new Error('Database connection failed')
+      );
       
-      // Restore original
-      sqlite3.verbose().Database = originalDatabase;
+      await expect(errorGateway.initialize()).rejects.toThrow('Database connection failed');
     });
 
     test('should check connectivity during initialization', async () => {
@@ -305,6 +299,9 @@ describe('CBDC Offline Gateway', () => {
     });
 
     test('should validate transaction before processing', async () => {
+      // Set up wallet balance first
+      gateway.metrics.walletBalances.set('wallet1', 5000);
+      
       const validateSpy = jest.spyOn(gateway, 'validateCBDCTransaction');
 
       const transaction = {
@@ -384,6 +381,9 @@ describe('CBDC Offline Gateway', () => {
     });
 
     test('should transfer CBDC tokens', async () => {
+      // Set up wallet balance first
+      gateway.metrics.walletBalances.set('wallet1', 5000);
+      
       const transferTransaction = {
         id: 'transfer123',
         type: CBDC_TRANSACTION_TYPES.TRANSFER,
@@ -403,6 +403,9 @@ describe('CBDC Offline Gateway', () => {
     });
 
     test('should redeem CBDC tokens', async () => {
+      // Set up wallet balance first
+      gateway.metrics.walletBalances.set('wallet1', 5000);
+      
       const redeemTransaction = {
         id: 'redeem123',
         type: CBDC_TRANSACTION_TYPES.REDEEM,
@@ -444,7 +447,7 @@ describe('CBDC Offline Gateway', () => {
         id: 'burn123',
         type: CBDC_TRANSACTION_TYPES.BURN,
         amount: 100,
-        from: 'wallet1',
+        from: 'TEST_CB', // Must be central bank ID
         reason: 'currency_withdrawal'
       };
 
@@ -453,7 +456,7 @@ describe('CBDC Offline Gateway', () => {
       expect(result).toMatchObject({
         txHash: expect.any(String),
         burned: true,
-        amount: 2000
+        amount: 100
       });
     });
   });

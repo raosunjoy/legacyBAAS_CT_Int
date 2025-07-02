@@ -218,13 +218,22 @@ describe('TCS BaNCS Simple Tests', () => {
 
   describe('Integration Workflow', () => {
     test('should prepare routing data structure', async () => {
-      const service = new TCSBaNCSIntegrationService({ bankCode: 'TESTBANK' });
+      const service = new TCSBaNCSIntegrationService({ 
+        bankCode: 'TESTBANK',
+        branchCode: 'MAIN',
+        baseURL: 'https://test-bancs-api.tcs.com',
+        apiKey: 'test-key',
+        enableCaching: false
+      });
       
       const transaction = {
         id: 'TXN001',
         amount: 75000,
         currency: 'USD',
-        messageType: 'MT103'
+        messageType: 'MT103',
+        receiver: {
+          bic: 'BANKGB22XXX'
+        }
       };
       
       const preprocessingResult = {
