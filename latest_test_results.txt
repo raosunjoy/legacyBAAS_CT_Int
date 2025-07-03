@@ -1,0 +1,2245 @@
+
+> legacy-baas@0.1.0 test
+> jest --coverage
+
+FAIL tests/blockchain/cbdc-offline-gateway.test.js (32.891 s)
+  CBDC Offline Gateway
+    Constants and Configuration
+      ✓ should export required CBDC transaction types (18 ms)
+      ✓ should export required offline status constants (2 ms)
+      ✓ should initialize with default configuration (1 ms)
+      ✓ should initialize with custom configuration (4 ms)
+      ✓ should initialize gateway state correctly (1 ms)
+    Initialization and Database Setup
+      ✓ should initialize offline database successfully (390 ms)
+      ✓ should handle database initialization errors (21 ms)
+      ✓ should check connectivity during initialization (86 ms)
+      ✓ should emit initialization events (79 ms)
+    Transaction Processing
+      ✓ should process transaction with online mode (72 ms)
+      ✓ should process transaction with offline mode (81 ms)
+      ✓ should force offline mode when specified (83 ms)
+      ✓ should validate transaction before processing (86 ms)
+      ✓ should handle invalid transaction types (93 ms)
+      ✓ should emit transaction events (79 ms)
+    CBDC Operations
+      ✓ should issue CBDC tokens (77 ms)
+      ✓ should transfer CBDC tokens (78 ms)
+      ✓ should redeem CBDC tokens (73 ms)
+      ✓ should exchange CBDC tokens (77 ms)
+      ✓ should burn CBDC tokens (77 ms)
+    Offline Operations
+      ✕ should store offline transactions in database (75 ms)
+      ✕ should load offline transactions from database (74 ms)
+      ✕ should handle offline transaction limits (91 ms)
+      ✕ should encrypt offline transaction data when enabled (72 ms)
+    Synchronization
+      ✓ should sync offline transactions when online (91 ms)
+      ✓ should handle sync failures (80 ms)
+      ✓ should mark transactions as synced (76 ms)
+      ✓ should mark transactions as failed (76 ms)
+      ✓ should cleanup synced transactions (83 ms)
+      ✓ should batch sync transactions (71 ms)
+      ✕ should emit sync events (82 ms)
+    Connectivity Management
+      ✓ should check connectivity status (80 ms)
+      ✓ should handle connectivity failures (5 ms)
+      ✕ should emit connectivity events (4 ms)
+      ✕ should start auto-sync when online and enabled (3 ms)
+    Wallet Balance Management
+      ✕ should get wallet balance (4 ms)
+      ✓ should handle missing wallet balance (4 ms)
+      ✕ should update wallet balance after transactions (3 ms)
+    Security Features
+      ✕ should encrypt transaction data when enabled (5 ms)
+      ✕ should decrypt transaction data (3 ms)
+      ✓ should sign transactions when enabled (3 ms)
+      ✓ should verify transaction signatures (3 ms)
+      ✓ should handle missing encryption key (4 ms)
+    Error Handling
+      ✕ should handle database errors gracefully (30004 ms)
+      ✓ should handle invalid transaction amounts (7 ms)
+      ✓ should handle missing required fields (5 ms)
+      ✕ should emit error events (5 ms)
+    Metrics and Monitoring
+      ✕ should track transaction metrics (4 ms)
+      ✕ should return comprehensive status (4 ms)
+      ✕ should return health status (5 ms)
+      ✓ should calculate performance metrics (4 ms)
+    Integration Features
+      ✕ should handle Algorand integration when enabled (4 ms)
+      ✕ should handle Crunchfish integration when enabled (3 ms)
+    Cleanup and Shutdown
+      ✓ should cleanup resources properly (4 ms)
+      ✕ should close database connection on cleanup (5 ms)
+      ✓ should clear intervals on cleanup (4 ms)
+
+  ● CBDC Offline Gateway › Offline Operations › should store offline transactions in database
+
+    Offline CBDC processing failed: _crypto.default.randomFillSync is not a function
+
+      312 |
+      313 |     } catch (error) {
+    > 314 |       throw new Error(`Offline CBDC processing failed: ${error.message}`);
+          |             ^
+      315 |     }
+      316 |   }
+      317 |
+
+      at CBDCOfflineGateway.processOfflineTransaction (src/blockchain/cbdc-offline-gateway.js:314:13)
+      at Object.processOfflineTransaction (tests/blockchain/cbdc-offline-gateway.test.js:480:21)
+
+  ● CBDC Offline Gateway › Offline Operations › should load offline transactions from database
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 1
+    Received length: 0
+    Received array:  []
+
+      507 |       const transactions = await gateway.loadOfflineTransactions();
+      508 |
+    > 509 |       expect(transactions).toHaveLength(1);
+          |                            ^
+      510 |       expect(transactions[0].id).toBe('offline1');
+      511 |     });
+      512 |
+
+      at Object.toHaveLength (tests/blockchain/cbdc-offline-gateway.test.js:509:28)
+
+  ● CBDC Offline Gateway › Offline Operations › should handle offline transaction limits
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected substring: "Offline transaction limit exceeded"
+    Received message:   "Offline CBDC processing failed: _crypto.default.randomFillSync is not a function"
+
+          312 |
+          313 |     } catch (error) {
+        > 314 |       throw new Error(`Offline CBDC processing failed: ${error.message}`);
+              |             ^
+          315 |     }
+          316 |   }
+          317 |
+
+      at CBDCOfflineGateway.processOfflineTransaction (src/blockchain/cbdc-offline-gateway.js:314:13)
+      at Object.processOfflineTransaction (tests/blockchain/cbdc-offline-gateway.test.js:525:28)
+      at Object.toThrow (node_modules/expect/build/index.js:218:22)
+      at Object.toThrow (tests/blockchain/cbdc-offline-gateway.test.js:525:76)
+
+  ● CBDC Offline Gateway › Offline Operations › should encrypt offline transaction data when enabled
+
+    Offline CBDC processing failed: _crypto.default.randomFillSync is not a function
+
+      312 |
+      313 |     } catch (error) {
+    > 314 |       throw new Error(`Offline CBDC processing failed: ${error.message}`);
+          |             ^
+      315 |     }
+      316 |   }
+      317 |
+
+      at CBDCOfflineGateway.processOfflineTransaction (src/blockchain/cbdc-offline-gateway.js:314:13)
+      at Object.processOfflineTransaction (tests/blockchain/cbdc-offline-gateway.test.js:542:21)
+
+  ● CBDC Offline Gateway › Synchronization › should emit sync events
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: ObjectContaining {"failed": 0, "processed": 0, "successful": 0}
+    Received: {"errors": [], "failedTransactions": 0, "syncDuration": 1, "syncedTransactions": 0, "timestamp": "2025-07-03T02:25:11.461Z", "totalTransactions": 0}
+
+    Number of calls: 1
+
+      652 |       await gateway.syncOfflineTransactions();
+      653 |
+    > 654 |       expect(syncSpy).toHaveBeenCalledWith(
+          |                       ^
+      655 |         expect.objectContaining({
+      656 |           processed: 0,
+      657 |           successful: 0,
+
+      at Object.toHaveBeenCalledWith (tests/blockchain/cbdc-offline-gateway.test.js:654:23)
+
+  ● CBDC Offline Gateway › Connectivity Management › should emit connectivity events
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      699 |       await gateway.checkConnectivity();
+      700 |       
+    > 701 |       expect(connectSpy).toHaveBeenCalled();
+          |                          ^
+      702 |
+      703 |       // Test going offline
+      704 |       global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
+
+      at Object.toHaveBeenCalled (tests/blockchain/cbdc-offline-gateway.test.js:701:26)
+
+  ● CBDC Offline Gateway › Connectivity Management › should start auto-sync when online and enabled
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      715 |       await gateway.checkConnectivity();
+      716 |
+    > 717 |       expect(startSyncSpy).toHaveBeenCalled();
+          |                            ^
+      718 |     });
+      719 |   });
+      720 |
+
+      at Object.toHaveBeenCalled (tests/blockchain/cbdc-offline-gateway.test.js:717:28)
+
+  ● CBDC Offline Gateway › Wallet Balance Management › should get wallet balance
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 5000
+    Received: 0
+
+      745 |
+      746 |       expect(balance.wallet).toBe('wallet123');
+    > 747 |       expect(balance.balance).toBe(5000);
+          |                               ^
+      748 |     });
+      749 |
+      750 |     test('should handle missing wallet balance', async () => {
+
+      at Object.toBe (tests/blockchain/cbdc-offline-gateway.test.js:747:31)
+
+  ● CBDC Offline Gateway › Wallet Balance Management › should update wallet balance after transactions
+
+    Online CBDC processing failed: Insufficient CBDC balance
+
+      263 |
+      264 |     } catch (error) {
+    > 265 |       throw new Error(`Online CBDC processing failed: ${error.message}`);
+          |             ^
+      266 |     }
+      267 |   }
+      268 |
+
+      at CBDCOfflineGateway.processOnlineTransaction (src/blockchain/cbdc-offline-gateway.js:265:13)
+      at CBDCOfflineGateway.processTransaction (src/blockchain/cbdc-offline-gateway.js:184:18)
+      at Object.<anonymous> (tests/blockchain/cbdc-offline-gateway.test.js:772:7)
+
+  ● CBDC Offline Gateway › Security Features › should encrypt transaction data when enabled
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "encrypteddata"
+    Received: "{\"sensitive\":\"data\"}"
+
+      788 |       const encrypted = gateway.encryptTransactionData(data);
+      789 |
+    > 790 |       expect(encrypted).toBe('encrypteddata');
+          |                         ^
+      791 |     });
+      792 |
+      793 |     test('should decrypt transaction data', () => {
+
+      at Object.toBe (tests/blockchain/cbdc-offline-gateway.test.js:790:25)
+
+  ● CBDC Offline Gateway › Security Features › should decrypt transaction data
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "decrypteddata"
+    Received: "encrypteddata"
+
+      798 |       const decrypted = gateway.decryptTransactionData(encrypted);
+      799 |
+    > 800 |       expect(decrypted).toBe('decrypteddata');
+          |                         ^
+      801 |     });
+      802 |
+      803 |     test('should sign transactions when enabled', () => {
+
+      at Object.toBe (tests/blockchain/cbdc-offline-gateway.test.js:800:25)
+
+  ● CBDC Offline Gateway › Error Handling › should handle database errors gracefully
+
+    thrown: "Exceeded timeout of 30000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      837 |     });
+      838 |
+    > 839 |     test('should handle database errors gracefully', async () => {
+          |     ^
+      840 |       // Mock database error
+      841 |       mockDb.run.mockImplementation((sql, params, callback) => {
+      842 |         callback(new Error('Database error'));
+
+      at test (tests/blockchain/cbdc-offline-gateway.test.js:839:5)
+      at describe (tests/blockchain/cbdc-offline-gateway.test.js:834:3)
+      at Object.describe (tests/blockchain/cbdc-offline-gateway.test.js:78:1)
+
+  ● CBDC Offline Gateway › Error Handling › should emit error events
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      893 |       }
+      894 |
+    > 895 |       expect(errorSpy).toHaveBeenCalled();
+          |                        ^
+      896 |     });
+      897 |   });
+      898 |
+
+      at Object.toHaveBeenCalled (tests/blockchain/cbdc-offline-gateway.test.js:895:24)
+
+  ● CBDC Offline Gateway › Metrics and Monitoring › should track transaction metrics
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 0
+
+      923 |
+      924 |       expect(gateway.metrics.totalTransactions).toBe(initialTotal + 1);
+    > 925 |       expect(gateway.metrics.offlineTransactions).toBe(initialOffline + 1);
+          |                                                   ^
+      926 |     });
+      927 |
+      928 |     test('should return comprehensive status', () => {
+
+      at Object.toBe (tests/blockchain/cbdc-offline-gateway.test.js:925:51)
+
+  ● CBDC Offline Gateway › Metrics and Monitoring › should return comprehensive status
+
+    TypeError: undefined is not iterable
+        at Object.fromEntries (<anonymous>)
+
+      958 |       failedSyncs: this.metrics.failedSyncs,
+      959 |       walletBalances: Object.fromEntries(this.metrics.walletBalances),
+    > 960 |       transactionVolume: Object.fromEntries(this.metrics.transactionVolume),
+          |                                 ^
+      961 |       lastSyncTimestamp: this.metrics.lastSyncTimestamp,
+      962 |       encryptedTransactions: this.metrics.encryptedTransactions,
+      963 |       signedTransactions: this.metrics.signedTransactions
+
+      at CBDCOfflineGateway.fromEntries [as getMetrics] (src/blockchain/cbdc-offline-gateway.js:960:33)
+      at CBDCOfflineGateway.getMetrics [as getStatus] (src/blockchain/cbdc-offline-gateway.js:1046:21)
+      at Object.getStatus (tests/blockchain/cbdc-offline-gateway.test.js:929:30)
+
+  ● CBDC Offline Gateway › Metrics and Monitoring › should return health status
+
+    TypeError: undefined is not iterable
+        at Object.fromEntries (<anonymous>)
+
+      958 |       failedSyncs: this.metrics.failedSyncs,
+      959 |       walletBalances: Object.fromEntries(this.metrics.walletBalances),
+    > 960 |       transactionVolume: Object.fromEntries(this.metrics.transactionVolume),
+          |                                 ^
+      961 |       lastSyncTimestamp: this.metrics.lastSyncTimestamp,
+      962 |       encryptedTransactions: this.metrics.encryptedTransactions,
+      963 |       signedTransactions: this.metrics.signedTransactions
+
+      at CBDCOfflineGateway.fromEntries [as getMetrics] (src/blockchain/cbdc-offline-gateway.js:960:33)
+      at CBDCOfflineGateway.getMetrics [as getHealthStatus] (src/blockchain/cbdc-offline-gateway.js:968:26)
+      at Object.getHealthStatus (tests/blockchain/cbdc-offline-gateway.test.js:942:30)
+
+  ● CBDC Offline Gateway › Integration Features › should handle Algorand integration when enabled
+
+    Online CBDC processing failed: Insufficient CBDC balance
+
+      263 |
+      264 |     } catch (error) {
+    > 265 |       throw new Error(`Online CBDC processing failed: ${error.message}`);
+          |             ^
+      266 |     }
+      267 |   }
+      268 |
+
+      at CBDCOfflineGateway.processOnlineTransaction (src/blockchain/cbdc-offline-gateway.js:265:13)
+      at Object.<anonymous> (tests/blockchain/cbdc-offline-gateway.test.js:984:7)
+
+  ● CBDC Offline Gateway › Integration Features › should handle Crunchfish integration when enabled
+
+    Offline CBDC processing failed: _crypto.default.randomFillSync is not a function
+
+      312 |
+      313 |     } catch (error) {
+    > 314 |       throw new Error(`Offline CBDC processing failed: ${error.message}`);
+          |             ^
+      315 |     }
+      316 |   }
+      317 |
+
+      at CBDCOfflineGateway.processOfflineTransaction (src/blockchain/cbdc-offline-gateway.js:314:13)
+      at Object.processOfflineTransaction (tests/blockchain/cbdc-offline-gateway.test.js:1004:21)
+
+  ● CBDC Offline Gateway › Cleanup and Shutdown › should close database connection on cleanup
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      1025 |       await gateway.cleanup();
+      1026 |
+    > 1027 |       expect(mockDb.close).toHaveBeenCalled();
+           |                            ^
+      1028 |     });
+      1029 |
+      1030 |     test('should clear intervals on cleanup', async () => {
+
+      at Object.toHaveBeenCalled (tests/blockchain/cbdc-offline-gateway.test.js:1027:28)
+
+FAIL tests/connectors/tcs-bancs/bancs-integration-service.test.js
+  TCS BaNCS Integration Service
+    Initialization
+      ✓ should initialize with default configuration (2 ms)
+      ✓ should initialize with custom configuration (1 ms)
+      ✓ should initialize caches and tracking structures (1 ms)
+    Transaction Preprocessing
+      ✓ should preprocess transaction successfully (2 ms)
+      ✓ should reject transaction with invalid input (1 ms)
+      ✓ should reject transaction with insufficient funds
+      ✓ should handle compliance failure (3 ms)
+      ✓ should emit appropriate events during preprocessing
+      ✕ should update processing statistics
+    Input Validation
+      ✓ should validate transaction input correctly (1 ms)
+      ✓ should detect missing required fields (1 ms)
+      ✓ should generate warnings for large transactions (1 ms)
+      ✓ should warn about unsupported currencies
+    Account Verification
+      ✓ should verify accounts successfully (1 ms)
+      ✓ should reject inactive sender account (1 ms)
+      ✓ should handle external receiver accounts
+    Transaction Enrichment
+      ✕ should enrich transaction with customer data
+      ✓ should calculate risk profile correctly (3 ms)
+      ✕ should handle enrichment failures gracefully (1 ms)
+    Routing Preparation
+      ✕ should prepare routing data successfully (1 ms)
+      ✓ should generate routing recommendations
+      ✓ should recommend manual review for high-risk transactions (1 ms)
+    Network Preferences
+      ✕ should prefer Corda for high-value transactions
+      ✓ should prefer XRP for cross-border payments (1 ms)
+      ✕ should prefer Ethereum L2 for small amounts
+      ✓ should calculate urgency correctly (1 ms)
+      ✓ should calculate cost sensitivity
+    Caching
+      ✓ should cache account details
+      ✓ should respect cache expiry (159 ms)
+    Utilities
+      ✓ should identify internal accounts correctly (2 ms)
+      ✓ should get FX rates (1 ms)
+      ✓ should extract compliance flags (2 ms)
+    Metrics and Monitoring
+      ✓ should provide comprehensive metrics (1 ms)
+      ✓ should track active transactions (2 ms)
+    Cleanup
+      ✓ should cleanup resources (2 ms)
+    Error Handling
+      ✕ should handle preprocessing errors gracefully (2 ms)
+      ✓ should emit error events (1 ms)
+    Constants and Exports
+      ✓ should export preprocessing stages correctly (2 ms)
+      ✓ should export integration events correctly (1 ms)
+
+  ● TCS BaNCS Integration Service › Transaction Preprocessing › should update processing statistics
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      279 |       expect(integrationService.processingStats.totalProcessed).toBe(initialStats.totalProcessed + 1);
+      280 |       expect(integrationService.processingStats.successfulValidations).toBe(initialStats.successfulValidations + 1);
+    > 281 |       expect(integrationService.processingStats.averageProcessingTime).toBeGreaterThan(0);
+          |                                                                        ^
+      282 |     });
+      283 |   });
+      284 |
+
+      at Object.toBeGreaterThan (tests/connectors/tcs-bancs/bancs-integration-service.test.js:281:72)
+
+  ● TCS BaNCS Integration Service › Transaction Enrichment › should enrich transaction with customer data
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      461 |       const result = await integrationService.enrichTransaction(transaction);
+      462 |
+    > 463 |       expect(result.success).toBe(true);
+          |                              ^
+      464 |       expect(result.enrichments.customer.id).toBe('CUST001');
+      465 |       expect(result.enrichments.products).toContain('SAVINGS');
+      466 |       expect(result.enrichments.fxRates.rate).toBe(1.08);
+
+      at Object.toBe (tests/connectors/tcs-bancs/bancs-integration-service.test.js:463:30)
+
+  ● TCS BaNCS Integration Service › Transaction Enrichment › should handle enrichment failures gracefully
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      496 |       const result = await integrationService.enrichTransaction(transaction);
+      497 |
+    > 498 |       expect(result.success).toBe(true);
+          |                              ^
+      499 |       expect(result.enrichments.customer).toBeNull();
+      500 |     });
+      501 |   });
+
+      at Object.toBe (tests/connectors/tcs-bancs/bancs-integration-service.test.js:498:30)
+
+  ● TCS BaNCS Integration Service › Routing Preparation › should prepare routing data successfully
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      531 |       const result = await integrationService.prepareForRouting(transaction, preprocessingResult);
+      532 |
+    > 533 |       expect(result.success).toBe(true);
+          |                              ^
+      534 |       expect(result.routingData.enhancedTransaction.preprocessingId).toBe('PROC-001');
+      535 |       expect(result.routingData.bankingContext.senderBank).toBe('TESTBANK');
+      536 |       expect(result.routingData.routingHints.preferredNetworks).toContain('r3-corda'); // High value preference
+
+      at Object.toBe (tests/connectors/tcs-bancs/bancs-integration-service.test.js:533:30)
+
+  ● TCS BaNCS Integration Service › Network Preferences › should prefer Corda for high-value transactions
+
+    TypeError: Cannot read properties of undefined (reading 'bic')
+
+      667 |
+      668 |     // Cross-border payments prefer XRP for speed
+    > 669 |     if (transaction.receiver.bic) {
+          |                              ^
+      670 |       preferences.push('xrp-ledger');
+      671 |     }
+      672 |
+
+      at TCSBaNCSIntegrationService.bic [as getPreferredNetworks] (src/connectors/tcs-bancs/bancs-integration-service.js:669:30)
+      at Object.getPreferredNetworks (tests/connectors/tcs-bancs/bancs-integration-service.test.js:596:46)
+
+  ● TCS BaNCS Integration Service › Network Preferences › should prefer Ethereum L2 for small amounts
+
+    TypeError: Cannot read properties of undefined (reading 'bic')
+
+      667 |
+      668 |     // Cross-border payments prefer XRP for speed
+    > 669 |     if (transaction.receiver.bic) {
+          |                              ^
+      670 |       preferences.push('xrp-ledger');
+      671 |     }
+      672 |
+
+      at TCSBaNCSIntegrationService.bic [as getPreferredNetworks] (src/connectors/tcs-bancs/bancs-integration-service.js:669:30)
+      at Object.getPreferredNetworks (tests/connectors/tcs-bancs/bancs-integration-service.test.js:617:46)
+
+  ● TCS BaNCS Integration Service › Error Handling › should handle preprocessing errors gracefully
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "error"
+    Received: "rejected"
+
+      840 |       const result = await integrationService.preprocessTransaction(transaction);
+      841 |
+    > 842 |       expect(result.status).toBe('error');
+          |                             ^
+      843 |       expect(result.error).toContain('Database connection failed');
+      844 |       expect(integrationService.processingStats.failedValidations).toBe(1);
+      845 |     });
+
+      at Object.toBe (tests/connectors/tcs-bancs/bancs-integration-service.test.js:842:29)
+
+FAIL tests/adapters/enhanced-swift-parser.test.js
+  Enhanced SWIFT Parser
+    Initialization
+      ✓ should initialize with default configuration (1 ms)
+      ✓ should initialize with custom configuration (1 ms)
+      ✓ should initialize performance metrics (1 ms)
+    Message Format Detection
+      ✓ should detect MT103 format (3 ms)
+      ✓ should detect MT202 format
+      ✓ should detect MT515 format (1 ms)
+      ✓ should detect MT700 format
+      ✓ should detect ISO 20022 format (1 ms)
+      ✓ should detect BaNCS XML format
+      ✓ should detect Temenos JSON format (1 ms)
+      ✓ should detect FIS fixed-width format
+      ✓ should throw error for unknown format (17 ms)
+    SWIFT MT103 Parsing
+      ✓ should parse MT103 message successfully (2 ms)
+      ✕ should extract compliance data from MT103 (1 ms)
+      ✕ should convert MT103 to blockchain format (1 ms)
+      ✓ should handle validation errors (1 ms)
+    SWIFT MT515 Parsing (Tokenized Assets)
+      ✓ should parse MT515 message successfully
+      ✕ should extract tokenization data from MT515 (1 ms)
+    SWIFT MT700 Parsing (Trade Finance)
+      ✓ should parse MT700 message successfully (1 ms)
+      ✕ should extract trade finance compliance data (1 ms)
+    Multi-System Format Parsing
+      ✕ should parse BaNCS XML format (2 ms)
+      ✕ should parse FIS fixed-width format (1 ms)
+      ✓ should parse Temenos JSON format (1 ms)
+    ISO 20022 Parsing
+      ✓ should parse Customer Credit Transfer (pacs.008) (1 ms)
+    Blockchain Format Conversion
+      ✓ should convert to Ethereum format (1 ms)
+      ✓ should convert to Ripple format
+      ✓ should convert to Hyperledger format (5 ms)
+      ✓ should throw error for unsupported blockchain format
+    Batch Processing
+      ✓ should process multiple messages in batch (1 ms)
+      ✓ should handle batch processing errors gracefully (1 ms)
+    Performance Metrics
+      ✓ should track parsing metrics (1 ms)
+      ✓ should track parsing failures
+    Compliance Data Extraction
+      ✕ should extract high-value transaction indicators (1 ms)
+      ✓ should extract standard compliance requirements
+    Error Handling
+      ✓ should handle invalid message format gracefully (1 ms)
+      ✓ should handle missing required fields
+      ✓ should handle malformed XML gracefully (2 ms)
+      ✓ should handle malformed JSON gracefully (1 ms)
+    Use Case Classification
+      ✓ should classify cross-border payments correctly
+      ✓ should classify tokenized assets correctly (1 ms)
+      ✓ should classify trade finance correctly
+      ✓ should classify unknown messages (1 ms)
+    Constants and Configuration
+      ✓ should export SWIFT field definitions
+      ✓ should export system parsers (1 ms)
+
+  ● Enhanced SWIFT Parser › SWIFT MT103 Parsing › should extract compliance data from MT103
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      140 |       expect(result.complianceData.customerData.sender).toBeDefined();
+      141 |       expect(result.complianceData.customerData.receiver).toBeDefined();
+    > 142 |       expect(result.complianceData.transactionData.amount).toBeDefined();
+          |                                                            ^
+      143 |       expect(result.complianceData.requiredChecks).toContain('sender_kyc');
+      144 |       expect(result.complianceData.requiredChecks).toContain('receiver_kyc');
+      145 |     });
+
+      at Object.toBeDefined (tests/adapters/enhanced-swift-parser.test.js:142:60)
+
+  ● Enhanced SWIFT Parser › SWIFT MT103 Parsing › should convert MT103 to blockchain format
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      151 |
+      152 |       expect(result.blockchainPayload).toBeDefined();
+    > 153 |       expect(result.blockchainPayload.value).toBeDefined();
+          |                                              ^
+      154 |       expect(result.blockchainPayload.gasLimit).toBe(21000);
+      155 |       expect(result.blockchainPayload.metadata).toBeDefined();
+      156 |     });
+
+      at Object.toBeDefined (tests/adapters/enhanced-swift-parser.test.js:153:46)
+
+  ● Enhanced SWIFT Parser › SWIFT MT515 Parsing (Tokenized Assets) › should extract tokenization data from MT515
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected value: "sender_kyc"
+    Received array: ["sanctions_screening"]
+
+      190 |       expect(result.fields.security_identification).toContain('ISIN');
+      191 |       expect(result.fields.quantity_of_financial_instrument).toBeTruthy();
+    > 192 |       expect(result.complianceData.requiredChecks).toContain('sender_kyc');
+          |                                                    ^
+      193 |     });
+      194 |   });
+      195 |
+
+      at Object.toContain (tests/adapters/enhanced-swift-parser.test.js:192:52)
+
+  ● Enhanced SWIFT Parser › SWIFT MT700 Parsing (Trade Finance) › should extract trade finance compliance data
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      231 |       const result = await parser.parseMessage(sampleMT700, 'MT700');
+      232 |
+    > 233 |       expect(result.complianceData.customerData.sender).toBeDefined();
+          |                                                         ^
+      234 |       expect(result.complianceData.customerData.receiver).toBeDefined();
+      235 |       expect(result.complianceData.requiredChecks).toContain('aml_screening');
+      236 |     });
+
+      at Object.toBeDefined (tests/adapters/enhanced-swift-parser.test.js:233:57)
+
+  ● Enhanced SWIFT Parser › Multi-System Format Parsing › should parse BaNCS XML format
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "TXN123456"
+    Received: null
+
+      257 |       expect(result.standard).toBe('TCS_BANCS');
+      258 |       expect(result.bankingSystem).toBe('TCS_BANCS');
+    > 259 |       expect(result.fields.transactionId).toBe('TXN123456');
+          |                                           ^
+      260 |       expect(result.fields.amount).toBe('1000.00');
+      261 |       expect(result.fields.currency).toBe('USD');
+      262 |     });
+
+      at Object.toBe (tests/adapters/enhanced-swift-parser.test.js:259:43)
+
+  ● Enhanced SWIFT Parser › Multi-System Format Parsing › should parse FIS fixed-width format
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "0001000.00"
+    Received: "0001000.00 1234"
+
+      272 |       expect(result.fields.transactionId).toBe('TXN123456');
+      273 |       expect(result.fields.currency).toBe('USD');
+    > 274 |       expect(result.fields.amount).toBe('0001000.00');
+          |                                    ^
+      275 |     });
+      276 |
+      277 |     test('should parse Temenos JSON format', async () => {
+
+      at Object.toBe (tests/adapters/enhanced-swift-parser.test.js:274:36)
+
+  ● Enhanced SWIFT Parser › Compliance Data Extraction › should extract high-value transaction indicators
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected value: "high_value_transaction"
+    Received array: []
+
+      449 |       const result = await parser.parseMessage(highValueMT103, 'MT103');
+      450 |
+    > 451 |       expect(result.complianceData.riskIndicators).toContain('high_value_transaction');
+          |                                                    ^
+      452 |       expect(result.complianceData.riskIndicators).toContain('cash_related');
+      453 |       expect(result.complianceData.requiredChecks).toContain('enhanced_due_diligence');
+      454 |       expect(result.complianceData.requiredChecks).toContain('aml_screening');
+
+      at Object.toContain (tests/adapters/enhanced-swift-parser.test.js:451:52)
+
+PASS tests/blockchain/base-gateway.test.js
+  Base Blockchain Gateway
+    Constructor
+      ✓ should throw error when instantiated directly (10 ms)
+      ✓ should initialize with default configuration (1 ms)
+      ✓ should initialize with empty state
+    Abstract Methods
+      ✓ should throw error for unimplemented connect method
+      ✓ should throw error for unimplemented disconnect method (1 ms)
+      ✓ should throw error for unimplemented submitTransaction method (1 ms)
+      ✓ should throw error for unimplemented getTransactionStatus method (1 ms)
+      ✓ should throw error for unimplemented getNetworkHealth method
+    Transaction Validation
+      ✓ should validate valid transaction (1 ms)
+      ✓ should throw error for null transaction (1 ms)
+      ✓ should throw error for missing transaction ID
+      ✓ should throw error for invalid amount (1 ms)
+      ✓ should throw error for missing currency (1 ms)
+      ✓ should throw error for missing sender (1 ms)
+      ✓ should throw error for missing receiver
+    Connection Management
+      ✓ should connect successfully (1 ms)
+      ✓ should disconnect successfully
+      ✓ should ensure connection before operations (1 ms)
+      ✓ should perform health check after timeout
+      ✓ should reconnect on health check failure
+    Transaction Processing
+      ✓ should process transaction successfully (10 ms)
+      ✓ should handle transaction processing errors (1004 ms)
+      ✓ should track successful transactions (9 ms)
+      ✓ should update metrics on transaction processing (9 ms)
+    Retry Logic
+      ✓ should retry failed submissions (1003 ms)
+      ✓ should not retry validation errors (3 ms)
+      ✓ should exhaust retry attempts and throw final error (1004 ms)
+      ✓ should implement exponential backoff (3 ms)
+    Validation Error Detection
+      ✓ should identify validation errors (2 ms)
+      ✓ should not identify network errors as validation errors (2 ms)
+    Metrics and Monitoring
+      ✓ should return comprehensive metrics (3 ms)
+      ✓ should calculate success rate correctly (1011 ms)
+      ✓ should track transaction history with limits (95 ms)
+      ✓ should clear transaction history (9 ms)
+    Network Information
+      ✓ should return network information (2 ms)
+    Transaction Tracking
+      ✓ should track pending transactions (9 ms)
+      ✓ should remove completed transactions from pending (9 ms)
+    Utility Methods
+      ✓ should implement sleep utility (104 ms)
+    Constants Export
+      ✓ should export transaction status constants (3 ms)
+      ✓ should export network type constants (2 ms)
+
+PASS src/connectors/__tests__/multi-bank-architecture.test.js
+  Multi-Bank Architecture
+    BankingConnectorFactory
+      Factory Initialization
+        ✓ should initialize with default configuration (2 ms)
+        ✓ should initialize with custom configuration
+      Bank Registration
+        ✓ should register a bank successfully (7 ms)
+        ✓ should validate bank configuration during registration (10 ms)
+        ✓ should emit registration events (2 ms)
+      Load Balancing
+        ✓ should use round-robin load balancing (8 ms)
+        ✓ should use least-connections load balancing
+        ✓ should use random load balancing
+        ✓ should filter out unhealthy connectors (1 ms)
+        ✓ should throw error when no healthy connectors available (1 ms)
+      Transaction Processing
+        ✓ should process transaction successfully
+        ✓ should retry failed transactions (3007 ms)
+        ✓ should emit transaction events (3 ms)
+      Failover Handling
+        ✓ should handle failover when no healthy connectors (105 ms)
+      Factory Status and Metrics
+        ✓ should return comprehensive factory status (4 ms)
+        ✓ should return health status for all connectors (3 ms)
+    BaseBankingConnector
+      Initialization
+        ✓ should initialize with proper configuration (10 ms)
+        ✓ should emit connected event on successful initialization (2 ms)
+        ✓ should emit error event on initialization failure (2 ms)
+      Transaction Processing
+        ✓ should process complete transaction successfully (3 ms)
+        ✓ should handle transaction validation failure (8 ms)
+        ✓ should emit transaction events (3 ms)
+      Error Handling and Mapping
+        ✓ should map errors to standard error codes (2 ms)
+      Metrics and Status
+        ✓ should track performance metrics (2 ms)
+        ✓ should return comprehensive status (2 ms)
+        ✓ should return health status (2 ms)
+    Configuration Management
+      Bank Configuration Validation
+        ✓ should validate valid configuration (1 ms)
+        ✓ should identify missing required fields (1 ms)
+        ✓ should provide warnings for recommended fields (1 ms)
+      Multi-Bank Configuration Creation
+        ✓ should create configuration for multiple banks (1 ms)
+  Multi-Bank Integration Tests
+    ✓ should handle multiple banks simultaneously (2 ms)
+
+PASS tests/connectors/tcs-bancs/bancs-connector.test.js
+  TCS BaNCS Connector
+    Initialization
+      ✓ should initialize with default configuration (1 ms)
+      ✓ should initialize with custom configuration (1 ms)
+      ✓ should setup HTTP client with correct headers
+    Authentication
+      OAuth2 Authentication
+        ✓ should authenticate successfully with OAuth2 (52 ms)
+        ✓ should handle OAuth2 authentication failure (43 ms)
+        ✓ should not re-authenticate if token is still valid
+        ✓ should re-authenticate if token is expired (10 ms)
+      API Key Authentication
+        ✓ should configure API key authentication (1 ms)
+        ✓ should fail if API key not configured (1 ms)
+      Unsupported Authentication Method
+        ✓ should throw error for unsupported auth method (1 ms)
+    Account Operations
+      Get Account Details
+        ✓ should retrieve account details successfully (23 ms)
+        ✓ should handle account not found error (16 ms)
+        ✓ should transform account response correctly (9 ms)
+      Check Account Balance
+        ✓ should retrieve balance successfully (17 ms)
+        ✓ should handle balance check error (19 ms)
+        ✓ should transform balance response with default values (9 ms)
+    Transaction Validation
+      ✓ should validate transaction input correctly (9 ms)
+      ✓ should throw error for missing required fields (9 ms)
+      ✓ should throw error for invalid amount (9 ms)
+      ✓ should validate transaction successfully with sufficient balance (27 ms)
+      ✓ should reject transaction with insufficient funds (15 ms)
+      ✓ should reject transaction for inactive account (15 ms)
+    Compliance Checks
+      ✓ should perform compliance check successfully (15 ms)
+      ✓ should handle compliance check failure (19 ms)
+      ✓ should handle compliance service failure gracefully (17 ms)
+    Security Features
+      ✓ should generate request signature correctly (1 ms)
+      ✓ should return null signature if no key configured (1 ms)
+      ✓ should encrypt and decrypt data correctly (74 ms)
+    Connection Management
+      ✓ should test connection successfully (14 ms)
+      ✓ should handle connection test failure (16 ms)
+      ✓ should get metrics correctly (1 ms)
+      ✓ should cleanup resources (1 ms)
+    HTTP Interceptors
+      ✓ should add authentication and custom headers (7 ms)
+      ✓ should handle 401 authentication errors (9 ms)
+    Constants and Mappings
+      ✓ should export BANCS_ENDPOINTS correctly
+      ✓ should export STATUS_MAPPING correctly (1 ms)
+
+PASS tests/connectors/tcs-bancs/bancs-webhook-handler.test.js
+  BaNCS Webhook Handler
+    Initialization
+      ✓ should initialize with default configuration (2 ms)
+      ✓ should initialize with custom configuration (1 ms)
+      ✓ should setup Express app with middleware
+    Webhook Signature Verification
+      ✓ should verify valid webhook signature (1 ms)
+      ✓ should reject invalid webhook signature (1 ms)
+      ✓ should handle missing signature header
+      ✓ should skip verification when secret not configured (1 ms)
+    Webhook Payload Processing
+      ✓ should parse valid webhook payload (1 ms)
+      ✓ should reject invalid webhook payload (3 ms)
+      ✓ should handle missing optional fields (1 ms)
+    Duplicate Detection
+      ✓ should detect duplicate webhooks
+      ✓ should clean expired duplicate entries (155 ms)
+    Rate Limiting
+      ✓ should enforce rate limits when enabled (66 ms)
+    Webhook Event Processing
+      ✓ should process transaction status change webhook (1 ms)
+      ✓ should process account balance update webhook (1 ms)
+      ✓ should process compliance status change webhook
+      ✓ should process fraud alert webhook
+      ✓ should handle unknown event types (1 ms)
+    HTTP Endpoints
+      ✓ should handle valid webhook with correct signature (8 ms)
+      ✓ should reject webhook with invalid signature (11 ms)
+      ✓ should handle duplicate webhooks gracefully (12 ms)
+      ✓ should provide health check endpoint (6 ms)
+      ✓ should provide metrics endpoint (6 ms)
+      ✓ should handle malformed JSON payload (7 ms)
+    Server Management
+      ✓ should start and stop server successfully (2 ms)
+      ✓ should handle server start errors
+    Statistics and Monitoring
+      ✓ should track processing statistics correctly
+      ✓ should clear statistics (1 ms)
+    Constants and Exports
+      ✓ should export webhook events correctly
+      ✓ should export status mapping correctly (1 ms)
+
+PASS tests/integration/swift-to-blockchain-flow.test.js
+  SWIFT to Blockchain Integration
+    Complete SWIFT Message Processing
+      ✓ should process MT103 message from parsing to blockchain execution (54 ms)
+      ✓ should process MT202 bank cover payment (1 ms)
+    Error Handling and Resilience
+      ✓ should handle invalid SWIFT message gracefully (12 ms)
+      ✓ should handle routing failures with fallback (1 ms)
+      ✓ should maintain transaction history across failures (52 ms)
+    Performance and Metrics
+      ✓ should track processing metrics across the pipeline (157 ms)
+      ✓ should demonstrate compliance workflow (2 ms)
+
+PASS tests/blockchain/corda-gateway.test.js
+  Corda Gateway
+    Constructor
+      ✓ should initialize with Corda-specific configuration (1 ms)
+      ✓ should use production URL when not in test mode (1 ms)
+      ✓ should initialize collections and state (1 ms)
+    Connection Management
+      ✓ should connect to Corda Node successfully (8 ms)
+      ✓ should handle connection failure (12 ms)
+      ✓ should disconnect successfully (1 ms)
+      ✓ should handle disconnection when not connected
+      ✓ should warn on legal name mismatch (1 ms)
+    Transaction Submission
+      ✓ should submit Corda flow successfully (1 ms)
+      ✓ should include FATF reporting for transactions >= $1000 (1 ms)
+      ✓ should include regulatory reporting for high-value transactions (1 ms)
+      ✓ should handle flow execution failure (1 ms)
+      ✓ should handle flow timeout (113 ms)
+      ✓ should throw error when not connected (1 ms)
+      ✓ should handle trade finance transactions (1 ms)
+    Transaction Status Queries
+      ✓ should get status for active flow (2 ms)
+      ✓ should get status from vault for completed transaction (1 ms)
+      ✓ should throw error for unknown transaction (2 ms)
+      ✓ should handle vault query failure (1 ms)
+    Network Health
+      ✓ should get network health successfully (2 ms)
+      ✓ should detect unhealthy network conditions (1 ms)
+      ✓ should handle network health check failure (1 ms)
+    Party Resolution
+      ✓ should resolve party from network map (1 ms)
+      ✓ should use cached party resolution (1 ms)
+      ✓ should return test party in test mode for unknown party (1 ms)
+      ✓ should throw error for unknown party in production mode (1 ms)
+    Vault Operations
+      ✓ should query vault with criteria (1 ms)
+      ✓ should get vault size (1 ms)
+      ✓ should handle vault size query failure (1 ms)
+      ✓ should update vault cache (1 ms)
+    Flow Management
+      ✓ should map Corda flow status correctly (1 ms)
+      ✓ should map vault state status correctly (1 ms)
+      ✓ should extract originator and beneficiary info (1 ms)
+    Transaction Monitoring
+      ✓ should start vault monitoring (1 ms)
+      ✓ should stop monitoring on cleanup (1 ms)
+      ✓ should cancel active flows on cleanup (1 ms)
+    Error Handling
+      ✓ should handle missing Corda SDK gracefully
+      ✓ should handle vault monitoring errors gracefully (1 ms)
+    Constants Export
+      ✓ should export Corda flow types (1 ms)
+      ✓ should export Corda state types (1 ms)
+
+PASS tests/index.test.js
+  Banking Legacy-to-Blockchain B2BaaS Platform
+    Health Check Endpoint
+      ✓ GET /health should return 200 with correct structure (16 ms)
+      ✓ Health check should include all required fields (5 ms)
+    API Status Endpoint
+      ✓ GET /api/v1/status should return platform information (6 ms)
+      ✓ Status endpoint should include all blockchain networks (5 ms)
+      ✓ Status endpoint should include all use cases (4 ms)
+    Error Handling
+      ✓ GET /nonexistent should return 404 (5 ms)
+      ✓ Invalid JSON should be handled gracefully (7 ms)
+    Security Headers
+      ✓ Response should include security headers (8 ms)
+    CORS Configuration
+      ✓ OPTIONS request should be handled (5 ms)
+      ✓ CORS headers should be present (5 ms)
+    Request Logging
+      ✓ All requests should be logged (4 ms)
+    Application Configuration
+      ✓ Application should export correctly (1 ms)
+      ✓ Environment variables should be handled
+    Error Scenarios
+      ✓ Should handle unhandled rejections
+      ✓ Should handle SIGTERM signal (1 ms)
+      ✓ Should handle SIGINT signal
+    Development Mode
+      ✓ Error messages in development mode (5 ms)
+
+PASS tests/integration/bancs-to-blockchain-flow.test.js
+  BaNCS to Blockchain Integration
+    Complete BaNCS Integration Flow
+      ✓ should process high-value MT103 with BaNCS validation and Corda routing (53 ms)
+      ✓ should handle small-value transaction with cost optimization (1 ms)
+      ✓ should handle compliance failure with manual review (1 ms)
+    BaNCS Integration Performance
+      ✓ should demonstrate network preference algorithms (1 ms)
+      ○ skipped should demonstrate end-to-end processing metrics
+    Error Recovery and Resilience
+      ✓ should handle BaNCS service failures gracefully
+
+PASS tests/analytics/transaction-analytics.test.js
+  Transaction Analytics Engine
+    Initialization
+      ✓ should initialize with default configuration (9 ms)
+      ✓ should initialize with custom configuration (1 ms)
+      ✓ should initialize empty metrics (1 ms)
+      ✓ should initialize network metrics (1 ms)
+    Transaction Recording
+      ✓ should record basic transaction (1 ms)
+      ✓ should record transaction with banking context (1 ms)
+      ✓ should record CBDC transaction (1 ms)
+      ✓ should generate transaction ID if not provided
+      ✓ should emit transaction recorded event (1 ms)
+    Transaction Status Updates
+      ✓ should update transaction status (1 ms)
+      ✓ should emit status update event (1 ms)
+      ✓ should handle non-existent transaction update (1 ms)
+    Dashboard Data Generation
+      ✓ should generate dashboard data for 24 hours (2 ms)
+      ✓ should calculate transaction overview correctly (2 ms)
+      ✓ should calculate network distribution (1 ms)
+      ✓ should calculate compliance metrics (1 ms)
+      ✓ should calculate performance metrics (1 ms)
+    CBDC Metrics
+      ✓ should calculate CBDC metrics (1 ms)
+      ✓ should track active CBDC accounts (1 ms)
+    Real-time Metrics
+      ✓ should provide real-time metrics
+      ✓ should limit processing times array size (24 ms)
+    Error Analysis
+      ✓ should analyze errors by network (2 ms)
+      ✓ should analyze errors by type
+      ✓ should analyze errors by reason (1 ms)
+      ✓ should provide recent errors (1 ms)
+    Geographic Distribution
+      ✓ should extract country codes from BIC (1 ms)
+      ✓ should calculate geographic distribution (1 ms)
+      ✓ should handle invalid BIC codes (1 ms)
+    Alert Thresholds
+      ✓ should detect high error rate alert (1 ms)
+      ✓ should detect high processing time alert
+      ✓ should detect low compliance rate alert (1 ms)
+    System Health
+      ✓ should provide system health metrics (1 ms)
+      ✓ should indicate unhealthy when too many data points (1 ms)
+    Data Cleanup
+      ✓ should clean up old data
+      ✓ should not clean up recent data (1 ms)
+    Volume Trends
+      ✓ should calculate hourly volume trends (1 ms)
+    Constants and Exports
+      ✓ should export analytics metrics constants (1 ms)
+      ✓ should export time windows constants
+      ✓ should export aggregation types constants (1 ms)
+    Performance Metrics Calculation
+      ✓ should calculate performance statistics correctly (1 ms)
+      ✓ should handle empty performance data (1 ms)
+      ✓ should calculate latency percentiles
+
+PASS tests/monitoring/performance-monitor.test.js
+  Performance Monitor
+    Constructor
+      ✓ should initialize with default configuration (2 ms)
+      ✓ should initialize with custom configuration (1 ms)
+      ✓ should initialize monitoring state (1 ms)
+      ✓ should initialize system metrics (1 ms)
+      ✓ should initialize alert thresholds
+    Monitoring Lifecycle
+      ✓ should start monitoring successfully (1 ms)
+      ✓ should handle already active monitoring (1 ms)
+      ✓ should start metrics collection when enabled (1 ms)
+      ✓ should start health monitoring
+      ✓ should start alert monitoring when enabled (1 ms)
+      ✓ should handle monitoring start errors (9 ms)
+      ✓ should stop monitoring successfully (1 ms)
+      ✓ should handle stop when not monitoring
+      ✓ should clear all intervals on stop (1 ms)
+    Metrics Collection
+      ✓ should collect metrics periodically (1 ms)
+      ✓ should collect system metrics (1 ms)
+      ✓ should collect platform metrics (1 ms)
+      ✓ should collect business metrics (1 ms)
+      ✓ should handle metrics collection errors gracefully
+    Metric Recording
+      ✓ should record metric with correct structure (1 ms)
+      ✓ should store metric history
+      ✓ should limit metric history size (2 ms)
+      ✓ should record transaction events (1 ms)
+      ✓ should handle failed transactions (1 ms)
+      ✓ should calculate average response time correctly
+    Health Monitoring
+      ✓ should perform health checks periodically (2 ms)
+      ✓ should handle health check errors gracefully
+    Alert System
+      ✓ should evaluate alert conditions periodically
+      ✓ should create alert for high transaction failure rate (1 ms)
+      ✓ should create alert for high response time (1 ms)
+      ✓ should create alerts for system resource usage (1 ms)
+      ✓ should emit alert created event
+      ✓ should update existing alert occurrences (1 ms)
+      ✓ should handle alert notification sending (1 ms)
+      ✓ should handle notification failures gracefully
+      ✓ should not create alert when no transactions recorded (1 ms)
+    Status and Reporting
+      ✓ should return comprehensive monitoring status (1 ms)
+      ✓ should return metrics summary
+      ✓ should export metrics in JSON format (1 ms)
+      ✓ should export metrics in Prometheus format
+      ✓ should export metrics in CSV format (1 ms)
+      ✓ should throw error for unsupported export format (7 ms)
+    Utility Methods
+      ✓ should get CPU usage (1 ms)
+      ✓ should get memory usage
+      ✓ should get disk usage (1 ms)
+      ✓ should get network I/O (1 ms)
+      ✓ should get transaction metrics
+      ✓ should get connector metrics (1 ms)
+      ✓ should get blockchain metrics
+      ✓ should calculate daily volume (1 ms)
+      ✓ should calculate monthly volume
+      ✓ should calculate average transaction value (4 ms)
+    Cleanup and Shutdown
+      ✓ should cleanup all resources (1 ms)
+    Error Handling
+      ✓ should handle metrics collection errors in individual methods (1 ms)
+      ✓ should handle alert evaluation errors
+    Constants Export
+      ✓ should export metric types correctly (1 ms)
+      ✓ should export alert severity levels correctly
+
+PASS tests/blockchain/ethereum-l2-gateway.test.js
+  Ethereum L2 Gateway
+    Constructor
+      ✓ should initialize with Ethereum L2-specific configuration (1 ms)
+      ✓ should use production RPC when not in test mode (1 ms)
+      ✓ should initialize collections and state (1 ms)
+      ✓ should include default contract addresses
+    Connection Management
+      ✓ should connect to Ethereum L2 network successfully (7 ms)
+      ✓ should handle chain ID mismatch (13 ms)
+      ✓ should connect with mnemonic
+      ✓ should connect in read-only mode without wallet (1 ms)
+      ✓ should disconnect successfully (1 ms)
+      ✓ should handle connection failure (1 ms)
+    Transaction Submission
+      ✓ should submit token transfer successfully (1 ms)
+      ✓ should submit token deposit successfully (1 ms)
+      ✓ should submit token withdraw successfully (1 ms)
+      ✓ should submit yield farming stake successfully
+      ✓ should handle yield farming when disabled (1 ms)
+      ✓ should submit lending supply successfully (1 ms)
+      ✓ should handle all yield farming actions (1 ms)
+      ✓ should handle all lending actions
+      ✓ should handle unknown yield farming action (1 ms)
+      ✓ should handle unknown lending action (1 ms)
+      ✓ should handle lending when disabled (1 ms)
+      ✓ should handle yield farming harvest without approval
+      ✓ should handle lending borrow action (1 ms)
+      ✓ should handle lending repay action with approval (1 ms)
+      ✓ should throw error when provider not connected
+      ✓ should throw error when wallet not initialized (1 ms)
+      ✓ should handle transaction failure (1 ms)
+    Transaction Status Queries
+      ✓ should get transaction status successfully (1 ms)
+      ✓ should return pending for transaction not yet mined
+      ✓ should return failed for failed transaction (5 ms)
+      ✓ should throw error for unknown transaction (1 ms)
+    Network Health
+      ✓ should get network health successfully (1 ms)
+      ✓ should detect unhealthy network conditions
+      ✓ should handle network health check failure (1 ms)
+    Address Resolution
+      ✓ should resolve Ethereum address from receiver
+      ✓ should resolve ENS name (1 ms)
+      ✓ should handle ENS resolution failure gracefully (1 ms)
+      ✓ should return test address in test mode for unknown receiver
+      ✓ should throw error for unknown receiver in production mode (1 ms)
+    Token Operations
+      ✓ should get token balance successfully
+      ✓ should handle balance query failure (1 ms)
+      ✓ should throw error for unknown token (1 ms)
+    Gas Price Management
+      ✓ should get current gas price (1 ms)
+      ✓ should start gas price monitoring
+      ✓ should stop monitoring on cleanup (1 ms)
+      ✓ should handle gas price query failure (1 ms)
+    Contract Management
+      ✓ should load contract instances on connection
+      ✓ should get contract by type (1 ms)
+      ✓ should throw error for unknown contract type (1 ms)
+    Error Handling
+      ✓ should handle missing ethers library gracefully
+      ✓ should handle gas price monitoring errors gracefully (1 ms)
+      ✓ should handle missing ethers.js library during connect
+      ✓ should handle disconnection errors gracefully (1 ms)
+    Constants Export
+      ✓ should export contract types (1 ms)
+      ✓ should export token standards
+      ✓ should export default contracts (1 ms)
+
+PASS tests/blockchain/algorand-gateway.test.js
+  Algorand CBDC Gateway
+    Initialization
+      ✓ should initialize with correct network type (1 ms)
+      ✓ should initialize with default configuration (1 ms)
+      ✓ should initialize with custom configuration
+      ✓ should initialize CBDC metrics
+    Network Connection
+      ✓ should connect to Algorand network successfully (1 ms)
+      ✓ should handle unsupported network error (19 ms)
+      ✓ should handle missing credentials error (1 ms)
+      ✓ should disconnect successfully
+    Transaction Validation
+      ✓ should validate CBDC transaction successfully (1 ms)
+      ✓ should reject transaction without ID
+      ✓ should reject transaction with invalid amount
+      ✓ should reject transaction exceeding maximum amount (1 ms)
+      ✓ should validate mint transaction for central bank
+      ✓ should reject mint transaction for non-central bank (1 ms)
+      ✓ should validate freeze transaction for central bank (4 ms)
+      ✓ should reject freeze transaction without target address (1 ms)
+    CBDC Transaction Processing
+      ✓ should process CBDC transfer transaction (1 ms)
+      ✓ should process CBDC mint transaction (1 ms)
+      ✓ should process CBDC burn transaction (1 ms)
+      ✓ should process compliance freeze transaction
+      ✓ should handle unsupported transaction type (1 ms)
+      ✓ should reject transaction when not connected
+    Rate Limiting
+      ✓ should enforce global rate limit (1 ms)
+      ✓ should enforce per-account rate limit
+    Compliance and Fraud Detection
+      ✓ should pass compliance checks for valid transaction (1 ms)
+      ✓ should detect large transaction requiring review
+      ✓ should perform fraud detection (1 ms)
+    CBDC Balance Operations
+      ✓ should get CBDC balance for account with asset
+      ✓ should return zero balance for account without asset (1 ms)
+      ✓ should return zero balance for account with no assets property
+      ✓ should handle balance query error (1 ms)
+    Transaction Status
+      ✓ should get status for pending transaction (1 ms)
+      ✓ should get status for confirmed transaction
+      ✓ should handle transaction not found (1 ms)
+    Network Health
+      ✓ should get healthy network status
+      ✓ should handle network health check error (1 ms)
+    Central Bank Operations
+      ✓ should identify central bank account correctly
+      ✓ should identify non-central bank account
+      ✓ should handle missing account (1 ms)
+    CBDC Asset Verification
+      ✓ should verify CBDC asset successfully
+      ✓ should handle asset verification failure (1 ms)
+    Metrics and Monitoring
+      ✓ should track CBDC metrics correctly
+      ✓ should get comprehensive CBDC metrics (1 ms)
+    Additional Coverage Tests
+      ✓ should handle private key initialization
+      ✓ should handle missing algosdk library gracefully (1 ms)
+      ✓ should handle edge case coverage areas
+    Constants and Exports
+      ✓ should export CBDC transaction types correctly
+      ✓ should export CBDC asset parameters correctly (1 ms)
+      ✓ should export Algorand networks correctly
+
+PASS tests/blockchain/xrp-gateway.test.js
+  XRP Gateway
+    Constructor
+      ✓ should initialize with XRP-specific configuration (1 ms)
+      ✓ should use production server when not in test mode (1 ms)
+      ✓ should initialize collections and state
+    Connection Management
+      ✓ should connect to XRP Ledger successfully (7 ms)
+      ✓ should handle connection failure (11 ms)
+      ✓ should disconnect successfully (1 ms)
+      ✓ should handle disconnection when not connected (1 ms)
+      ✓ should initialize without wallet if no seed provided
+    Transaction Submission
+      ✓ should submit XRP transaction successfully (1 ms)
+      ✓ should submit non-XRP currency transaction with path finding (1 ms)
+      ✓ should include memos for transaction reference (1 ms)
+      ✓ should handle transaction submission failure (5 ms)
+      ✓ should throw error when not connected (1 ms)
+      ✓ should handle destination tag (1 ms)
+    Transaction Status Mapping
+      ✓ should map tesSUCCESS to CONFIRMED
+      ✓ should map payment failures to FAILED (1 ms)
+      ✓ should map validated transactions to CONFIRMED
+      ✓ should default to SUBMITTED for unknown status (1 ms)
+    Transaction Status Queries
+      ✓ should get transaction status successfully
+      ✓ should throw error for unknown transaction (1 ms)
+      ✓ should update tracked transaction status (1 ms)
+    Network Health
+      ✓ should get network health successfully (1 ms)
+      ✓ should detect unhealthy network conditions
+      ✓ should handle network health check failure (1 ms)
+    Address Resolution
+      ✓ should resolve destination address from receiver
+      ✓ should return test address in test mode for unknown receiver (1 ms)
+      ✓ should throw error for unknown receiver in production mode
+    Currency Issuers
+      ✓ should get issuer address for known currencies (1 ms)
+      ✓ should throw error for unknown currency
+    Path Finding
+      ✓ should find payment paths successfully (1 ms)
+      ✓ should handle path finding failure gracefully (1 ms)
+      ✓ should limit paths to maximum configured
+    Account Information
+      ✓ should get account info successfully (1 ms)
+      ✓ should handle account info failure (1 ms)
+    Exchange Rates
+      ✓ should get exchange rates with caching
+      ✓ should refresh rates after cache expiry (1 ms)
+    Transaction Monitoring
+      ✓ should start transaction monitoring
+      ✓ should stop monitoring on cleanup (1 ms)
+    Transaction Conversion
+      ✓ should convert XRP transaction correctly (1 ms)
+      ✓ should convert non-XRP transaction with issuer
+    Response Processing
+      ✓ should process transaction response correctly (1 ms)
+    Error Handling
+      ✓ should handle missing XRP library gracefully
+    Additional Error Coverage
+      ✓ should handle missing xrpl library error path
+      ✓ should handle empty path finding results (1 ms)
+      ✓ should handle orderbook errors in exchange rates
+    Constants Export
+      ✓ should export XRP transaction types (1 ms)
+
+PASS tests/router/smart-router.test.js
+  Smart Router
+    Constructor
+      ✓ should initialize with default configuration (1 ms)
+      ✓ should initialize with custom configuration (1 ms)
+      ✓ should initialize routing rules and network gateways (1 ms)
+      ✓ should initialize default routing rules
+    Transaction Validation
+      ✓ should validate valid transaction (1 ms)
+      ✓ should throw error for null transaction (15 ms)
+      ✓ should throw error for missing transaction ID
+      ✓ should throw error for missing message type (4 ms)
+      ✓ should throw error for invalid amount
+      ✓ should throw error for missing currency (1 ms)
+      ✓ should throw error for unsupported message type
+    Routing Factor Analysis
+      ✓ should analyze routing factors correctly (1 ms)
+      ✓ should identify high value transactions (1 ms)
+      ✓ should handle custom context
+    Currency-Based Routing Rules
+      ✓ should route optimal currency pairs to XRP (1 ms)
+      ✓ should route regulated currencies to Corda
+      ✓ should return null for non-matching currency rules (1 ms)
+    Amount-Based Routing Rules
+      ✓ should route high value transactions to Corda
+      ✓ should route fast route transactions to XRP (1 ms)
+      ✓ should route small amounts to Ethereum L2
+      ✓ should return null for medium amounts without special requirements (1 ms)
+    Compliance-Based Routing Rules
+      ✓ should route high compliance transactions to Corda
+      ✓ should route CBDC requirements to Algorand
+      ✓ should return null for standard compliance
+    Performance-Based Routing Rules
+      ✓ should route urgent transactions to fastest network
+      ✓ should avoid congested networks (1 ms)
+      ✓ should return null for normal urgency with no congestion
+      ✓ should return null when all networks are congested and no urgency (1 ms)
+    Cost Optimization Rules
+      ✓ should route to cheapest network when cost optimization enabled
+      ✓ should return null when cost optimization disabled (1 ms)
+    Routing Conflict Resolution
+      ✓ should return highest priority decision when multiple decisions exist
+      ✓ should use confidence as tiebreaker when priorities are equal (1 ms)
+      ✓ should return single decision when only one exists
+      ✓ should fallback to default network when no decisions exist (1 ms)
+    Network Availability Validation
+      ✓ should validate available network
+      ✓ should throw error for unavailable network (1 ms)
+      ✓ should throw error for non-existent network
+    Complete Routing Flow
+      ✓ should successfully route a transaction (1 ms)
+      ✓ should handle routing errors and emit error events
+      ✓ should store routing decision in history (1 ms)
+    Utility Methods
+      ✓ should analyze currency pair correctly
+      ✓ should analyze compliance requirements (1 ms)
+      ✓ should find fastest network correctly
+      ✓ should filter congested networks (1 ms)
+      ✓ should find cheapest network
+    Gateway Management
+      ✓ should register network gateway (1 ms)
+    Statistics and Monitoring
+      ✓ should return routing statistics
+      ✓ should return empty statistics when no transactions routed (1 ms)
+      ✓ should clear routing history
+    Network Metrics
+      ✓ should return network metrics with all required properties (1 ms)
+      ✓ should analyze transaction costs correctly (1 ms)
+    Constants Export
+      ✓ should export all required constants
+
+PASS tests/connectors/tcs-bancs/enhanced-bancs-connector.test.js
+  Enhanced TCS BaNCS Connector
+    Initialization
+      ✓ should initialize with correct configuration (4 ms)
+      ✓ should use default configuration values
+      ✓ should create HTTP client with correct configuration (1 ms)
+      ✓ should setup HTTP interceptors (1 ms)
+      ✓ should initialize authentication state
+    HTTP Interceptors
+      ✓ should add required headers in request interceptor (1 ms)
+      ✓ should handle request interceptor without authentication
+      ✓ should handle response interceptor success (1 ms)
+      ✓ should handle response interceptor error (1 ms)
+    Authentication
+      ✓ should authenticate successfully
+      ✓ should handle authentication failure (13 ms)
+      ✓ should ensure authentication when token is valid (1 ms)
+      ✓ should authenticate when token is expired
+      ✓ should authenticate when no token exists
+    Signature Generation
+      ✓ should generate signature correctly (1 ms)
+      ✓ should handle signature generation without data
+    Connection Testing
+      ✓ should test connection successfully (1 ms)
+      ✓ should handle connection test failure
+    Account Operations
+      ✓ should get account details successfully (1 ms)
+      ✓ should get account details with options (1 ms)
+      ✓ should handle account details error
+      ✓ should check account balance successfully (1 ms)
+      ✓ should check account balance without currency (1 ms)
+    Transaction Operations
+      ✓ should validate transaction successfully
+      ✓ should handle transaction validation failure (1 ms)
+      ✓ should process debit transaction successfully (1 ms)
+      ✓ should process credit transaction successfully
+      ✓ should get transaction status successfully (1 ms)
+    Compliance Operations
+      ✓ should perform compliance check successfully (1 ms)
+      ✓ should handle compliance check failure
+    Data Encryption
+      ✓ should encrypt data when encryption is enabled (1 ms)
+      ✓ should decrypt data correctly
+      ✓ should return original data when encryption is disabled
+    Webhook Handling
+      ✓ should verify webhook signature correctly
+      ✓ should reject invalid webhook signature (1 ms)
+      ✓ should process webhook notification successfully (1 ms)
+    Error Handling
+      ✓ should map authentication errors correctly
+      ✓ should map network errors correctly
+      ✓ should map balance errors correctly
+      ✓ should return general error for unmapped errors
+    Health and Status
+      ✓ should return health status successfully (1 ms)
+      ✓ should return unhealthy status when connection fails
+      ✓ should return comprehensive connector status (1 ms)
+    Cleanup
+      ✓ should cleanup resources properly
+
+PASS tests/compliance/zk-proof-compliance.test.js
+  ZK Proof Compliance Service
+    Initialization
+      ✓ should initialize with default configuration (1 ms)
+      ✓ should initialize with custom configuration (1 ms)
+      ✓ should initialize performance metrics (4 ms)
+    Comprehensive Compliance Checks
+      ✓ should perform full compliance check successfully (2 ms)
+      ✓ should pass compliance for low-risk transaction (1 ms)
+      ✓ should handle high-risk transaction appropriately (1 ms)
+      ✓ should generate privacy-preserving compliance report (2 ms)
+    Individual Compliance Checks
+      KYC (Know Your Customer)
+        ✓ should generate KYC zero-knowledge proof (1 ms)
+        ✓ should verify KYC proof successfully
+      AML (Anti-Money Laundering)
+        ✓ should generate AML zero-knowledge proof
+        ✓ should identify high-value transaction reporting requirement (1 ms)
+      Sanctions Screening
+        ✓ should generate sanctions screening proof
+        ✓ should verify sanctions screening result (1 ms)
+      PEP (Politically Exposed Person)
+        ✓ should generate PEP screening proof
+      Enhanced Due Diligence
+        ✓ should generate enhanced DD proof for high-value transaction
+    Aggregate Proof Generation
+      ✓ should generate aggregate proof from individual proofs (1 ms)
+    Risk Assessment
+      ✓ should classify risk levels correctly
+      ✓ should calculate overall compliance correctly (1 ms)
+      ✓ should fail overall compliance if any check fails
+    Privacy Preservation
+      ✓ should sanitize check results for privacy (1 ms)
+      ✓ should sanitize proofs to protect privacy (1 ms)
+    Compliance Standards and Jurisdictions
+      ✓ should identify applicable compliance standards
+      ✓ should identify relevant jurisdictions (1 ms)
+    Performance Metrics
+      ✓ should track compliance service metrics (1 ms)
+      ✓ should track compliance type statistics
+    Error Handling
+      ✓ should handle unsupported compliance check type (13 ms)
+      ✓ should handle proof verification failure gracefully (1 ms)
+    Caching and Performance
+      ✓ should cache proofs when enabled
+    Data Retention and Cleanup
+      ✓ should store compliance results with privacy preservation (1 ms)
+    Constants and Exports
+      ✓ should export compliance types correctly (1 ms)
+      ✓ should export risk levels correctly
+      ✓ should export ZK circuits correctly (1 ms)
+
+PASS tests/adapters/swift-parser.test.js
+  SWIFT Parser
+    Constructor
+      ✓ should initialize with supported message types
+      ✓ should return supported types
+    MT103 Message Parsing
+      ✓ should parse valid MT103 message correctly (1 ms)
+      ✓ should handle MT103 with minimal required fields (1 ms)
+      ✓ should throw error for MT103 missing required fields (8 ms)
+    MT202 Message Parsing
+      ✓ should parse valid MT202 message correctly (1 ms)
+      ✓ should throw error for MT202 missing required fields
+    Message Type Extraction
+      ✓ should extract MT103 from header (1 ms)
+      ✓ should extract MT202 from header
+      ✓ should throw error for invalid header format (1 ms)
+    Amount Field Parsing
+      ✓ should parse amount field correctly
+      ✓ should parse amount with commas (1 ms)
+      ✓ should throw error for invalid amount format
+    Customer Info Parsing
+      ✓ should parse multi-line customer info
+      ✓ should handle single line customer info (4 ms)
+      ✓ should handle null customer info
+      ✓ should handle undefined customer info
+      ✓ should handle empty customer info (1 ms)
+    BIC Validation
+      ✓ should validate correct BIC codes
+      ✓ should reject invalid BIC codes (1 ms)
+      ✓ should handle case insensitive BIC validation
+    Error Handling
+      ✓ should throw error for null message (1 ms)
+      ✓ should throw error for undefined message
+      ✓ should throw error for empty string (1 ms)
+      ✓ should throw error for non-string message
+      ✓ should throw error for unsupported message type (1 ms)
+      ✓ should throw error for missing text block
+      ✓ should throw error for no valid fields (1 ms)
+    JSON Conversion
+      ✓ should convert message to JSON string
+    Field Parsing Edge Cases
+      ✓ should handle fields without content (1 ms)
+      ✓ should handle complex field parsing
+    Required Fields Validation
+      ✓ should get required fields for MT103
+      ✓ should get required fields for MT202 (1 ms)
+      ✓ should return empty array for unknown message type
+
+PASS tests/connectors/tcs-bancs/bancs-simple.test.js
+  TCS BaNCS Simple Tests
+    TCS BaNCS Connector
+      ✓ should initialize connector with config (1 ms)
+      ✓ should validate required transaction fields
+      ✓ should reject invalid transaction (12 ms)
+      ✓ should transform balance response correctly
+      ✓ should export correct constants (1 ms)
+    TCS BaNCS Integration Service
+      ✓ should initialize integration service
+      ✓ should validate transaction input (1 ms)
+      ✓ should detect validation errors
+      ✓ should calculate risk profile
+      ✓ should identify internal accounts (1 ms)
+      ✓ should calculate urgency levels
+      ✓ should provide metrics (1 ms)
+      ✓ should export correct constants
+    Integration Workflow
+      ✓ should prepare routing data structure (1 ms)
+      ✓ should generate routing recommendations
+      ✓ should extract compliance flags
+
+-------------------------------|---------|----------|---------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+File                           | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                                                                                                        
+-------------------------------|---------|----------|---------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+All files                      |   79.07 |    73.84 |   74.88 |   79.38 |                                                                                                                                                                          
+ src                           |   76.31 |    42.85 |    62.5 |   76.31 |                                                                                                                                                                          
+  index.js                     |   76.31 |    42.85 |    62.5 |   76.31 | 110-111,115-116,121-125                                                                                                                                                  
+ src/adapters                  |   91.31 |    80.98 |   94.87 |   92.67 |                                                                                                                                                                          
+  enhanced-swift-parser.js     |   87.37 |    79.05 |      92 |    89.3 | 215,285,340-345,351,545-546,552-553,721,765,774-777,793-803                                                                                                              
+  swift-parser.js              |     100 |       90 |     100 |     100 | 14,158,221,235,286                                                                                                                                                       
+ src/analytics                 |   47.04 |    51.14 |   40.26 |   45.47 |                                                                                                                                                                          
+  monitoring-dashboard.js      |       0 |        0 |       0 |       0 | 9-1315                                                                                                                                                                   
+  transaction-analytics.js     |   84.56 |       75 |   78.94 |   84.26 | 132,137,417-419,466,545,802,807-890,905-906,912-913                                                                                                                      
+ src/blockchain                |   83.56 |    75.36 |   88.48 |   84.34 |                                                                                                                                                                          
+  algorand-gateway.js          |   79.06 |    75.84 |      88 |    78.9 | 176,268-272,277-278,328,360,368,397,430-501,509,538-575,595,608-622,707,723,733,818                                                                                      
+  base-gateway.js              |     100 |    97.91 |     100 |     100 | 15                                                                                                                                                                       
+  cbdc-offline-gateway.js      |   66.87 |    56.85 |   80.32 |   69.43 | 229-230,237-249,287-302,326,409,463,488-489,572-574,605-609,628-663,688-689,736-737,750,762-774,825-828,845-868,899-905,921-933,941,946,969-977,1010-1030,1072,1080-1088 
+  corda-gateway.js             |   88.38 |     77.7 |      90 |   88.77 | 21,120,156-160,210-213,483-513,571,663,667-670,746-750,768                                                                                                               
+  ethereum-l2-gateway.js       |   95.85 |    88.65 |   95.23 |   95.83 | 19,134,740,744-754                                                                                                                                                       
+  xrp-gateway.js               |   90.72 |    84.21 |   94.11 |   90.72 | 20,101,174-177,421-424,511,515-520,594-597                                                                                                                               
+ src/compliance                |   95.56 |    76.66 |     100 |    95.3 |                                                                                                                                                                          
+  zk-proof-compliance.js       |   95.56 |    76.66 |     100 |    95.3 | 234-241,513-519,792,803                                                                                                                                                  
+ src/connectors/base           |   76.89 |    71.09 |   49.18 |   76.64 |                                                                                                                                                                          
+  base-banking-connector.js    |   81.13 |    73.01 |      50 |   81.13 | 129-193,217,358-376,427-431,494                                                                                                                                          
+  connector-factory.js         |   74.26 |    69.23 |   48.83 |    73.8 | 158,164,175-184,211-218,230,258,315-322,372,389-391,395,403,407,416,420,424,439-442,473,533-596                                                                          
+ src/connectors/config         |    92.5 |       75 |     100 |   93.93 |                                                                                                                                                                          
+  multi-bank-config.js         |    92.5 |       75 |     100 |   93.93 | 160,181                                                                                                                                                                  
+ src/connectors/tcs-bancs      |   82.79 |    82.52 |   90.19 |   83.19 |                                                                                                                                                                          
+  bancs-connector.js           |   67.58 |     75.3 |   81.81 |   67.97 | 139-140,146-184,191-254,273-277,375-376,396-397,496,513-517,630,634                                                                                                      
+  bancs-integration-service.js |   95.87 |     92.3 |     100 |    96.6 | 298-299,396-409,440,483                                                                                                                                                  
+  bancs-webhook-handler.js     |   81.38 |     83.9 |   87.87 |   81.18 | 207-213,232,285-286,325-340,382-383,406-407,455-456,463-472,604-614,671-749,767-768                                                                                      
+  enhanced-bancs-connector.js  |   83.79 |    80.64 |   93.33 |   85.05 | 102,107,121,134-135,237,262,273,284,335,374,400,520,542,600,605,609,613-625,652-655,674,680                                                                              
+ src/monitoring                |   78.45 |    67.88 |   81.03 |   78.91 |                                                                                                                                                                          
+  performance-monitor.js       |   78.45 |    67.88 |   81.03 |   78.91 | 216,358,381,452,480,697-729,742-743,745,762-763,779,788-789,809-845,914-975                                                                                              
+ src/router                    |   97.96 |    91.07 |     100 |   98.91 |                                                                                                                                                                          
+  smart-router.js              |   97.96 |    91.07 |     100 |   98.91 | 489,699                                                                                                                                                                  
+-------------------------------|---------|----------|---------|---------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+=============================== Coverage summary ===============================
+Statements   : 79.07% ( 3054/3862 )
+Branches     : 73.84% ( 1900/2573 )
+Functions    : 74.88% ( 492/657 )
+Lines        : 79.38% ( 2969/3740 )
+================================================================================
+Jest: "global" coverage threshold for statements (80%) not met: 79.07%
+Jest: "global" coverage threshold for branches (80%) not met: 73.84%
+Jest: "global" coverage threshold for lines (80%) not met: 79.38%
+Jest: "global" coverage threshold for functions (80%) not met: 74.88%
+Summary of all failing tests
+FAIL tests/blockchain/cbdc-offline-gateway.test.js (32.891 s)
+  ● CBDC Offline Gateway › Offline Operations › should store offline transactions in database
+
+    Offline CBDC processing failed: _crypto.default.randomFillSync is not a function
+
+      312 |
+      313 |     } catch (error) {
+    > 314 |       throw new Error(`Offline CBDC processing failed: ${error.message}`);
+          |             ^
+      315 |     }
+      316 |   }
+      317 |
+
+      at CBDCOfflineGateway.processOfflineTransaction (src/blockchain/cbdc-offline-gateway.js:314:13)
+      at Object.processOfflineTransaction (tests/blockchain/cbdc-offline-gateway.test.js:480:21)
+
+  ● CBDC Offline Gateway › Offline Operations › should load offline transactions from database
+
+    expect(received).toHaveLength(expected)
+
+    Expected length: 1
+    Received length: 0
+    Received array:  []
+
+      507 |       const transactions = await gateway.loadOfflineTransactions();
+      508 |
+    > 509 |       expect(transactions).toHaveLength(1);
+          |                            ^
+      510 |       expect(transactions[0].id).toBe('offline1');
+      511 |     });
+      512 |
+
+      at Object.toHaveLength (tests/blockchain/cbdc-offline-gateway.test.js:509:28)
+
+  ● CBDC Offline Gateway › Offline Operations › should handle offline transaction limits
+
+    expect(received).rejects.toThrow(expected)
+
+    Expected substring: "Offline transaction limit exceeded"
+    Received message:   "Offline CBDC processing failed: _crypto.default.randomFillSync is not a function"
+
+          312 |
+          313 |     } catch (error) {
+        > 314 |       throw new Error(`Offline CBDC processing failed: ${error.message}`);
+              |             ^
+          315 |     }
+          316 |   }
+          317 |
+
+      at CBDCOfflineGateway.processOfflineTransaction (src/blockchain/cbdc-offline-gateway.js:314:13)
+      at Object.processOfflineTransaction (tests/blockchain/cbdc-offline-gateway.test.js:525:28)
+      at Object.toThrow (node_modules/expect/build/index.js:218:22)
+      at Object.toThrow (tests/blockchain/cbdc-offline-gateway.test.js:525:76)
+
+  ● CBDC Offline Gateway › Offline Operations › should encrypt offline transaction data when enabled
+
+    Offline CBDC processing failed: _crypto.default.randomFillSync is not a function
+
+      312 |
+      313 |     } catch (error) {
+    > 314 |       throw new Error(`Offline CBDC processing failed: ${error.message}`);
+          |             ^
+      315 |     }
+      316 |   }
+      317 |
+
+      at CBDCOfflineGateway.processOfflineTransaction (src/blockchain/cbdc-offline-gateway.js:314:13)
+      at Object.processOfflineTransaction (tests/blockchain/cbdc-offline-gateway.test.js:542:21)
+
+  ● CBDC Offline Gateway › Synchronization › should emit sync events
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: ObjectContaining {"failed": 0, "processed": 0, "successful": 0}
+    Received: {"errors": [], "failedTransactions": 0, "syncDuration": 1, "syncedTransactions": 0, "timestamp": "2025-07-03T02:25:11.461Z", "totalTransactions": 0}
+
+    Number of calls: 1
+
+      652 |       await gateway.syncOfflineTransactions();
+      653 |
+    > 654 |       expect(syncSpy).toHaveBeenCalledWith(
+          |                       ^
+      655 |         expect.objectContaining({
+      656 |           processed: 0,
+      657 |           successful: 0,
+
+      at Object.toHaveBeenCalledWith (tests/blockchain/cbdc-offline-gateway.test.js:654:23)
+
+  ● CBDC Offline Gateway › Connectivity Management › should emit connectivity events
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      699 |       await gateway.checkConnectivity();
+      700 |       
+    > 701 |       expect(connectSpy).toHaveBeenCalled();
+          |                          ^
+      702 |
+      703 |       // Test going offline
+      704 |       global.fetch = jest.fn().mockRejectedValue(new Error('Network error'));
+
+      at Object.toHaveBeenCalled (tests/blockchain/cbdc-offline-gateway.test.js:701:26)
+
+  ● CBDC Offline Gateway › Connectivity Management › should start auto-sync when online and enabled
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      715 |       await gateway.checkConnectivity();
+      716 |
+    > 717 |       expect(startSyncSpy).toHaveBeenCalled();
+          |                            ^
+      718 |     });
+      719 |   });
+      720 |
+
+      at Object.toHaveBeenCalled (tests/blockchain/cbdc-offline-gateway.test.js:717:28)
+
+  ● CBDC Offline Gateway › Wallet Balance Management › should get wallet balance
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 5000
+    Received: 0
+
+      745 |
+      746 |       expect(balance.wallet).toBe('wallet123');
+    > 747 |       expect(balance.balance).toBe(5000);
+          |                               ^
+      748 |     });
+      749 |
+      750 |     test('should handle missing wallet balance', async () => {
+
+      at Object.toBe (tests/blockchain/cbdc-offline-gateway.test.js:747:31)
+
+  ● CBDC Offline Gateway › Wallet Balance Management › should update wallet balance after transactions
+
+    Online CBDC processing failed: Insufficient CBDC balance
+
+      263 |
+      264 |     } catch (error) {
+    > 265 |       throw new Error(`Online CBDC processing failed: ${error.message}`);
+          |             ^
+      266 |     }
+      267 |   }
+      268 |
+
+      at CBDCOfflineGateway.processOnlineTransaction (src/blockchain/cbdc-offline-gateway.js:265:13)
+      at CBDCOfflineGateway.processTransaction (src/blockchain/cbdc-offline-gateway.js:184:18)
+      at Object.<anonymous> (tests/blockchain/cbdc-offline-gateway.test.js:772:7)
+
+  ● CBDC Offline Gateway › Security Features › should encrypt transaction data when enabled
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "encrypteddata"
+    Received: "{\"sensitive\":\"data\"}"
+
+      788 |       const encrypted = gateway.encryptTransactionData(data);
+      789 |
+    > 790 |       expect(encrypted).toBe('encrypteddata');
+          |                         ^
+      791 |     });
+      792 |
+      793 |     test('should decrypt transaction data', () => {
+
+      at Object.toBe (tests/blockchain/cbdc-offline-gateway.test.js:790:25)
+
+  ● CBDC Offline Gateway › Security Features › should decrypt transaction data
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "decrypteddata"
+    Received: "encrypteddata"
+
+      798 |       const decrypted = gateway.decryptTransactionData(encrypted);
+      799 |
+    > 800 |       expect(decrypted).toBe('decrypteddata');
+          |                         ^
+      801 |     });
+      802 |
+      803 |     test('should sign transactions when enabled', () => {
+
+      at Object.toBe (tests/blockchain/cbdc-offline-gateway.test.js:800:25)
+
+  ● CBDC Offline Gateway › Error Handling › should handle database errors gracefully
+
+    thrown: "Exceeded timeout of 30000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      837 |     });
+      838 |
+    > 839 |     test('should handle database errors gracefully', async () => {
+          |     ^
+      840 |       // Mock database error
+      841 |       mockDb.run.mockImplementation((sql, params, callback) => {
+      842 |         callback(new Error('Database error'));
+
+      at test (tests/blockchain/cbdc-offline-gateway.test.js:839:5)
+      at describe (tests/blockchain/cbdc-offline-gateway.test.js:834:3)
+      at Object.describe (tests/blockchain/cbdc-offline-gateway.test.js:78:1)
+
+  ● CBDC Offline Gateway › Error Handling › should emit error events
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      893 |       }
+      894 |
+    > 895 |       expect(errorSpy).toHaveBeenCalled();
+          |                        ^
+      896 |     });
+      897 |   });
+      898 |
+
+      at Object.toHaveBeenCalled (tests/blockchain/cbdc-offline-gateway.test.js:895:24)
+
+  ● CBDC Offline Gateway › Metrics and Monitoring › should track transaction metrics
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 1
+    Received: 0
+
+      923 |
+      924 |       expect(gateway.metrics.totalTransactions).toBe(initialTotal + 1);
+    > 925 |       expect(gateway.metrics.offlineTransactions).toBe(initialOffline + 1);
+          |                                                   ^
+      926 |     });
+      927 |
+      928 |     test('should return comprehensive status', () => {
+
+      at Object.toBe (tests/blockchain/cbdc-offline-gateway.test.js:925:51)
+
+  ● CBDC Offline Gateway › Metrics and Monitoring › should return comprehensive status
+
+    TypeError: undefined is not iterable
+        at Object.fromEntries (<anonymous>)
+
+      958 |       failedSyncs: this.metrics.failedSyncs,
+      959 |       walletBalances: Object.fromEntries(this.metrics.walletBalances),
+    > 960 |       transactionVolume: Object.fromEntries(this.metrics.transactionVolume),
+          |                                 ^
+      961 |       lastSyncTimestamp: this.metrics.lastSyncTimestamp,
+      962 |       encryptedTransactions: this.metrics.encryptedTransactions,
+      963 |       signedTransactions: this.metrics.signedTransactions
+
+      at CBDCOfflineGateway.fromEntries [as getMetrics] (src/blockchain/cbdc-offline-gateway.js:960:33)
+      at CBDCOfflineGateway.getMetrics [as getStatus] (src/blockchain/cbdc-offline-gateway.js:1046:21)
+      at Object.getStatus (tests/blockchain/cbdc-offline-gateway.test.js:929:30)
+
+  ● CBDC Offline Gateway › Metrics and Monitoring › should return health status
+
+    TypeError: undefined is not iterable
+        at Object.fromEntries (<anonymous>)
+
+      958 |       failedSyncs: this.metrics.failedSyncs,
+      959 |       walletBalances: Object.fromEntries(this.metrics.walletBalances),
+    > 960 |       transactionVolume: Object.fromEntries(this.metrics.transactionVolume),
+          |                                 ^
+      961 |       lastSyncTimestamp: this.metrics.lastSyncTimestamp,
+      962 |       encryptedTransactions: this.metrics.encryptedTransactions,
+      963 |       signedTransactions: this.metrics.signedTransactions
+
+      at CBDCOfflineGateway.fromEntries [as getMetrics] (src/blockchain/cbdc-offline-gateway.js:960:33)
+      at CBDCOfflineGateway.getMetrics [as getHealthStatus] (src/blockchain/cbdc-offline-gateway.js:968:26)
+      at Object.getHealthStatus (tests/blockchain/cbdc-offline-gateway.test.js:942:30)
+
+  ● CBDC Offline Gateway › Integration Features › should handle Algorand integration when enabled
+
+    Online CBDC processing failed: Insufficient CBDC balance
+
+      263 |
+      264 |     } catch (error) {
+    > 265 |       throw new Error(`Online CBDC processing failed: ${error.message}`);
+          |             ^
+      266 |     }
+      267 |   }
+      268 |
+
+      at CBDCOfflineGateway.processOnlineTransaction (src/blockchain/cbdc-offline-gateway.js:265:13)
+      at Object.<anonymous> (tests/blockchain/cbdc-offline-gateway.test.js:984:7)
+
+  ● CBDC Offline Gateway › Integration Features › should handle Crunchfish integration when enabled
+
+    Offline CBDC processing failed: _crypto.default.randomFillSync is not a function
+
+      312 |
+      313 |     } catch (error) {
+    > 314 |       throw new Error(`Offline CBDC processing failed: ${error.message}`);
+          |             ^
+      315 |     }
+      316 |   }
+      317 |
+
+      at CBDCOfflineGateway.processOfflineTransaction (src/blockchain/cbdc-offline-gateway.js:314:13)
+      at Object.processOfflineTransaction (tests/blockchain/cbdc-offline-gateway.test.js:1004:21)
+
+  ● CBDC Offline Gateway › Cleanup and Shutdown › should close database connection on cleanup
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      1025 |       await gateway.cleanup();
+      1026 |
+    > 1027 |       expect(mockDb.close).toHaveBeenCalled();
+           |                            ^
+      1028 |     });
+      1029 |
+      1030 |     test('should clear intervals on cleanup', async () => {
+
+      at Object.toHaveBeenCalled (tests/blockchain/cbdc-offline-gateway.test.js:1027:28)
+
+FAIL tests/connectors/tcs-bancs/bancs-integration-service.test.js
+  ● TCS BaNCS Integration Service › Transaction Preprocessing › should update processing statistics
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      279 |       expect(integrationService.processingStats.totalProcessed).toBe(initialStats.totalProcessed + 1);
+      280 |       expect(integrationService.processingStats.successfulValidations).toBe(initialStats.successfulValidations + 1);
+    > 281 |       expect(integrationService.processingStats.averageProcessingTime).toBeGreaterThan(0);
+          |                                                                        ^
+      282 |     });
+      283 |   });
+      284 |
+
+      at Object.toBeGreaterThan (tests/connectors/tcs-bancs/bancs-integration-service.test.js:281:72)
+
+  ● TCS BaNCS Integration Service › Transaction Enrichment › should enrich transaction with customer data
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      461 |       const result = await integrationService.enrichTransaction(transaction);
+      462 |
+    > 463 |       expect(result.success).toBe(true);
+          |                              ^
+      464 |       expect(result.enrichments.customer.id).toBe('CUST001');
+      465 |       expect(result.enrichments.products).toContain('SAVINGS');
+      466 |       expect(result.enrichments.fxRates.rate).toBe(1.08);
+
+      at Object.toBe (tests/connectors/tcs-bancs/bancs-integration-service.test.js:463:30)
+
+  ● TCS BaNCS Integration Service › Transaction Enrichment › should handle enrichment failures gracefully
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      496 |       const result = await integrationService.enrichTransaction(transaction);
+      497 |
+    > 498 |       expect(result.success).toBe(true);
+          |                              ^
+      499 |       expect(result.enrichments.customer).toBeNull();
+      500 |     });
+      501 |   });
+
+      at Object.toBe (tests/connectors/tcs-bancs/bancs-integration-service.test.js:498:30)
+
+  ● TCS BaNCS Integration Service › Routing Preparation › should prepare routing data successfully
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      531 |       const result = await integrationService.prepareForRouting(transaction, preprocessingResult);
+      532 |
+    > 533 |       expect(result.success).toBe(true);
+          |                              ^
+      534 |       expect(result.routingData.enhancedTransaction.preprocessingId).toBe('PROC-001');
+      535 |       expect(result.routingData.bankingContext.senderBank).toBe('TESTBANK');
+      536 |       expect(result.routingData.routingHints.preferredNetworks).toContain('r3-corda'); // High value preference
+
+      at Object.toBe (tests/connectors/tcs-bancs/bancs-integration-service.test.js:533:30)
+
+  ● TCS BaNCS Integration Service › Network Preferences › should prefer Corda for high-value transactions
+
+    TypeError: Cannot read properties of undefined (reading 'bic')
+
+      667 |
+      668 |     // Cross-border payments prefer XRP for speed
+    > 669 |     if (transaction.receiver.bic) {
+          |                              ^
+      670 |       preferences.push('xrp-ledger');
+      671 |     }
+      672 |
+
+      at TCSBaNCSIntegrationService.bic [as getPreferredNetworks] (src/connectors/tcs-bancs/bancs-integration-service.js:669:30)
+      at Object.getPreferredNetworks (tests/connectors/tcs-bancs/bancs-integration-service.test.js:596:46)
+
+  ● TCS BaNCS Integration Service › Network Preferences › should prefer Ethereum L2 for small amounts
+
+    TypeError: Cannot read properties of undefined (reading 'bic')
+
+      667 |
+      668 |     // Cross-border payments prefer XRP for speed
+    > 669 |     if (transaction.receiver.bic) {
+          |                              ^
+      670 |       preferences.push('xrp-ledger');
+      671 |     }
+      672 |
+
+      at TCSBaNCSIntegrationService.bic [as getPreferredNetworks] (src/connectors/tcs-bancs/bancs-integration-service.js:669:30)
+      at Object.getPreferredNetworks (tests/connectors/tcs-bancs/bancs-integration-service.test.js:617:46)
+
+  ● TCS BaNCS Integration Service › Error Handling › should handle preprocessing errors gracefully
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "error"
+    Received: "rejected"
+
+      840 |       const result = await integrationService.preprocessTransaction(transaction);
+      841 |
+    > 842 |       expect(result.status).toBe('error');
+          |                             ^
+      843 |       expect(result.error).toContain('Database connection failed');
+      844 |       expect(integrationService.processingStats.failedValidations).toBe(1);
+      845 |     });
+
+      at Object.toBe (tests/connectors/tcs-bancs/bancs-integration-service.test.js:842:29)
+
+FAIL tests/adapters/enhanced-swift-parser.test.js
+  ● Enhanced SWIFT Parser › SWIFT MT103 Parsing › should extract compliance data from MT103
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      140 |       expect(result.complianceData.customerData.sender).toBeDefined();
+      141 |       expect(result.complianceData.customerData.receiver).toBeDefined();
+    > 142 |       expect(result.complianceData.transactionData.amount).toBeDefined();
+          |                                                            ^
+      143 |       expect(result.complianceData.requiredChecks).toContain('sender_kyc');
+      144 |       expect(result.complianceData.requiredChecks).toContain('receiver_kyc');
+      145 |     });
+
+      at Object.toBeDefined (tests/adapters/enhanced-swift-parser.test.js:142:60)
+
+  ● Enhanced SWIFT Parser › SWIFT MT103 Parsing › should convert MT103 to blockchain format
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      151 |
+      152 |       expect(result.blockchainPayload).toBeDefined();
+    > 153 |       expect(result.blockchainPayload.value).toBeDefined();
+          |                                              ^
+      154 |       expect(result.blockchainPayload.gasLimit).toBe(21000);
+      155 |       expect(result.blockchainPayload.metadata).toBeDefined();
+      156 |     });
+
+      at Object.toBeDefined (tests/adapters/enhanced-swift-parser.test.js:153:46)
+
+  ● Enhanced SWIFT Parser › SWIFT MT515 Parsing (Tokenized Assets) › should extract tokenization data from MT515
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected value: "sender_kyc"
+    Received array: ["sanctions_screening"]
+
+      190 |       expect(result.fields.security_identification).toContain('ISIN');
+      191 |       expect(result.fields.quantity_of_financial_instrument).toBeTruthy();
+    > 192 |       expect(result.complianceData.requiredChecks).toContain('sender_kyc');
+          |                                                    ^
+      193 |     });
+      194 |   });
+      195 |
+
+      at Object.toContain (tests/adapters/enhanced-swift-parser.test.js:192:52)
+
+  ● Enhanced SWIFT Parser › SWIFT MT700 Parsing (Trade Finance) › should extract trade finance compliance data
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      231 |       const result = await parser.parseMessage(sampleMT700, 'MT700');
+      232 |
+    > 233 |       expect(result.complianceData.customerData.sender).toBeDefined();
+          |                                                         ^
+      234 |       expect(result.complianceData.customerData.receiver).toBeDefined();
+      235 |       expect(result.complianceData.requiredChecks).toContain('aml_screening');
+      236 |     });
+
+      at Object.toBeDefined (tests/adapters/enhanced-swift-parser.test.js:233:57)
+
+  ● Enhanced SWIFT Parser › Multi-System Format Parsing › should parse BaNCS XML format
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "TXN123456"
+    Received: null
+
+      257 |       expect(result.standard).toBe('TCS_BANCS');
+      258 |       expect(result.bankingSystem).toBe('TCS_BANCS');
+    > 259 |       expect(result.fields.transactionId).toBe('TXN123456');
+          |                                           ^
+      260 |       expect(result.fields.amount).toBe('1000.00');
+      261 |       expect(result.fields.currency).toBe('USD');
+      262 |     });
+
+      at Object.toBe (tests/adapters/enhanced-swift-parser.test.js:259:43)
+
+  ● Enhanced SWIFT Parser › Multi-System Format Parsing › should parse FIS fixed-width format
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "0001000.00"
+    Received: "0001000.00 1234"
+
+      272 |       expect(result.fields.transactionId).toBe('TXN123456');
+      273 |       expect(result.fields.currency).toBe('USD');
+    > 274 |       expect(result.fields.amount).toBe('0001000.00');
+          |                                    ^
+      275 |     });
+      276 |
+      277 |     test('should parse Temenos JSON format', async () => {
+
+      at Object.toBe (tests/adapters/enhanced-swift-parser.test.js:274:36)
+
+  ● Enhanced SWIFT Parser › Compliance Data Extraction › should extract high-value transaction indicators
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected value: "high_value_transaction"
+    Received array: []
+
+      449 |       const result = await parser.parseMessage(highValueMT103, 'MT103');
+      450 |
+    > 451 |       expect(result.complianceData.riskIndicators).toContain('high_value_transaction');
+          |                                                    ^
+      452 |       expect(result.complianceData.riskIndicators).toContain('cash_related');
+      453 |       expect(result.complianceData.requiredChecks).toContain('enhanced_due_diligence');
+      454 |       expect(result.complianceData.requiredChecks).toContain('aml_screening');
+
+      at Object.toContain (tests/adapters/enhanced-swift-parser.test.js:451:52)
+
+
+Test Suites: 3 failed, 1 skipped, 18 passed, 21 of 22 total
+Tests:       33 failed, 10 skipped, 740 passed, 783 total
+Snapshots:   0 total
+Time:        46.475 s
+Ran all test suites with tests matching "^((?!e2e|end-to-end).)*$".

@@ -59,21 +59,29 @@ jest.mock('sqlite3', () => ({
 }));
 
 // Mock crypto
-jest.mock('crypto', () => ({
-  randomBytes: jest.fn(() => Buffer.from('mockedrandom16bytes', 'utf8')),
-  createCipher: jest.fn(() => ({
-    update: jest.fn(() => 'encrypted'),
-    final: jest.fn(() => 'data')
-  })),
-  createDecipher: jest.fn(() => ({
-    update: jest.fn(() => 'decrypted'),
-    final: jest.fn(() => 'data')
-  })),
-  createHmac: jest.fn(() => ({
-    update: jest.fn().mockReturnThis(),
-    digest: jest.fn(() => 'signature')
-  }))
-}));
+jest.mock('crypto', () => {
+  const mockCrypto = {
+    randomBytes: jest.fn(() => Buffer.from('mockedrandom16bytes', 'utf8')),
+    randomFillSync: jest.fn(() => Buffer.from('mockedrandom16bytes', 'utf8')),
+    scryptSync: jest.fn(() => Buffer.from('derivedkey32byteslongpassword!', 'utf8')),
+    createCipheriv: jest.fn(() => ({
+      update: jest.fn(() => 'encrypted'),
+      final: jest.fn(() => 'data')
+    })),
+    createDecipheriv: jest.fn(() => ({
+      update: jest.fn(() => 'decrypted'),
+      final: jest.fn(() => 'data')
+    })),
+    createHmac: jest.fn(() => ({
+      update: jest.fn().mockReturnThis(),
+      digest: jest.fn(() => 'signature')
+    }))
+  };
+  return {
+    ...mockCrypto,
+    default: mockCrypto
+  };
+});
 
 describe('CBDC Offline Gateway', () => {
   let gateway;

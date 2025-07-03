@@ -366,15 +366,15 @@ class EnhancedSWIFTParser {
         messageType: 'BANCS_XML',
         standard: 'TCS_BANCS',
         fields: {
-          transactionId: this.extractXMLValue(bancsData, 'TransactionID'),
-          amount: this.extractXMLValue(bancsData, 'Amount'),
-          currency: this.extractXMLValue(bancsData, 'Currency'),
-          senderAccount: this.extractXMLValue(bancsData, 'SenderAccount'),
-          receiverAccount: this.extractXMLValue(bancsData, 'ReceiverAccount'),
-          senderName: this.extractXMLValue(bancsData, 'SenderName'),
-          receiverName: this.extractXMLValue(bancsData, 'ReceiverName'),
-          purpose: this.extractXMLValue(bancsData, 'Purpose'),
-          valueDate: this.extractXMLValue(bancsData, 'ValueDate')
+          transactionId: this.extractXMLValue(bancsData, 'Transaction.TransactionID'),
+          amount: this.extractXMLValue(bancsData, 'Transaction.Amount'),
+          currency: this.extractXMLValue(bancsData, 'Transaction.Currency'),
+          senderAccount: this.extractXMLValue(bancsData, 'Transaction.SenderAccount'),
+          receiverAccount: this.extractXMLValue(bancsData, 'Transaction.ReceiverAccount'),
+          senderName: this.extractXMLValue(bancsData, 'Transaction.SenderName'),
+          receiverName: this.extractXMLValue(bancsData, 'Transaction.ReceiverName'),
+          purpose: this.extractXMLValue(bancsData, 'Transaction.Purpose'),
+          valueDate: this.extractXMLValue(bancsData, 'Transaction.ValueDate')
         },
         bankingSystem: 'TCS_BANCS',
         useCase: 'cross_border_payment'
@@ -396,8 +396,8 @@ class EnhancedSWIFTParser {
       transactionId: { start: 0, length: 16 },
       valueDate: { start: 16, length: 6 },
       currency: { start: 22, length: 3 },
-      amount: { start: 25, length: 15 },
-      senderAccount: { start: 40, length: 20 },
+      amount: { start: 25, length: 11 },
+      senderAccount: { start: 37, length: 23 },
       receiverAccount: { start: 60, length: 20 },
       senderName: { start: 80, length: 35 },
       receiverName: { start: 115, length: 35 },
@@ -533,14 +533,14 @@ class EnhancedSWIFTParser {
 
     // Extract transaction information from parsed message
     compliance.transactionData = {
-      amount: parsedMessage.amount,
-      currency: parsedMessage.currency,
+      amount: parsedMessage.amount || fields.amount,
+      currency: parsedMessage.currency || fields.currency,
       purpose: parsedMessage.remittanceInfo || fields.purpose || fields.remittance_information,
       valueDate: parsedMessage.valueDate || fields.valueDate || fields.value_date_currency_amount
     };
 
     // Risk indicators based on amount and purpose
-    const amount = parseFloat(parsedMessage.amount || 0);
+    const amount = parseFloat(parsedMessage.amount || fields.amount || 0);
     if (amount > 10000) {
       compliance.riskIndicators.push('high_value_transaction');
       compliance.requiredChecks.push('enhanced_due_diligence');

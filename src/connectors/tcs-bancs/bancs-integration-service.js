@@ -666,7 +666,7 @@ class TCSBaNCSIntegrationService extends EventEmitter {
     }
 
     // Cross-border payments prefer XRP for speed
-    if (transaction.receiver.bic) {
+    if (transaction.receiver && transaction.receiver.bic) {
       preferences.push('xrp-ledger');
     }
 
