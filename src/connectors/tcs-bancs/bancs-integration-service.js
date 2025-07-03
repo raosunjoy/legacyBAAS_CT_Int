@@ -558,7 +558,14 @@ class TCSBaNCSIntegrationService extends EventEmitter {
         enhancedTransaction: {
           ...transaction,
           preprocessingId: preprocessingResult.processingId,
-          validationStatus: preprocessingResult.status
+          validationStatus: preprocessingResult.status,
+          bankingContext: {
+            senderBank: this.config.bankCode,
+            senderBranch: this.config.branchCode,
+            accountVerified: preprocessingResult.stages.accountVerification.passed,
+            complianceCleared: preprocessingResult.stages.compliance.passed,
+            availableBalance: preprocessingResult.stages.accountVerification.verifications.senderBalance?.availableBalance
+          }
         },
 
         // Routing hints

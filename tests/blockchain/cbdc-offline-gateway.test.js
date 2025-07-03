@@ -31,21 +31,37 @@ jest.mock('sqlite3', () => ({
     Database: jest.fn((dbPath, callback) => {
       const mockDb = {
         run: jest.fn((sql, params, callback) => {
-          if (callback) callback(null);
+          if (callback) {
+            setTimeout(() => callback(null), 0);
+          }
         }),
         all: jest.fn((sql, params, callback) => {
-          if (callback) callback(null, []);
+          if (callback) {
+            setTimeout(() => callback(null, []), 0);
+          }
         }),
         get: jest.fn((sql, params, callback) => {
-          if (callback) callback(null, null);
+          if (callback) {
+            setTimeout(() => callback(null, null), 0);
+          }
         }),
         close: jest.fn((callback) => {
-          if (callback) callback(null);
+          if (callback) {
+            setTimeout(() => callback(null), 0);
+          }
         }),
         serialize: jest.fn((fn) => fn()),
         prepare: jest.fn(() => ({
-          run: jest.fn(),
-          finalize: jest.fn()
+          run: jest.fn((id, offlineId, transactionData, status, createdAt, callback) => {
+            if (callback) {
+              setTimeout(() => callback(null), 0);
+            }
+          }),
+          finalize: jest.fn((callback) => {
+            if (callback) {
+              setTimeout(() => callback(null), 0);
+            }
+          })
         }))
       };
       
@@ -1030,9 +1046,16 @@ describe('CBDC Offline Gateway', () => {
     });
 
     test('should close database connection on cleanup', async () => {
+      // Initialize the gateway first to create the database connection
+      await gateway.initialize();
+      
+      // Spy on the database close method
+      const closeSpy = jest.spyOn(gateway.offlineDb, 'close');
+      
       await gateway.cleanup();
 
-      expect(mockDb.close).toHaveBeenCalled();
+      expect(closeSpy).toHaveBeenCalled();
+      expect(gateway.offlineDb).toBeNull();
     });
 
     test('should clear intervals on cleanup', async () => {

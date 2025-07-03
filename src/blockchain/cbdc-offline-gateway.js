@@ -683,8 +683,14 @@ class CBDCOfflineGateway extends EventEmitter {
 
   async initializeOfflineDatabase() {
     return new Promise((resolve, reject) => {
+      // Add timeout to prevent hanging during database initialization
+      const timeout = setTimeout(() => {
+        reject(new Error('Database initialization timeout'));
+      }, 15000); // 15 second timeout for initialization
+
       this.offlineDb = new sqlite3.Database(this.config.offlineDbPath, (err) => {
         if (err) {
+          clearTimeout(timeout);
           reject(new Error('Database connection failed: ' + err.message));
           return;
         }
@@ -713,6 +719,7 @@ class CBDCOfflineGateway extends EventEmitter {
           `);
         });
 
+        clearTimeout(timeout);
         resolve();
       });
     });
@@ -720,6 +727,17 @@ class CBDCOfflineGateway extends EventEmitter {
 
   async storeOfflineTransaction(transaction) {
     return new Promise((resolve, reject) => {
+      // Check database state
+      if (!this.offlineDb) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        reject(new Error('Database operation timeout'));
+      }, 10000); // 10 second timeout
+
       const stmt = this.offlineDb.prepare(`
         INSERT INTO offline_transactions 
         (id, offline_id, transaction_data, status, created_at)
@@ -733,6 +751,16 @@ class CBDCOfflineGateway extends EventEmitter {
         transaction.status,
         transaction.createdAt,
         (err) => {
+          // Clear timeout
+          clearTimeout(timeout);
+          
+          // Always finalize the statement to free resources
+          stmt.finalize((finalizeErr) => {
+            if (finalizeErr) {
+              logger.warn('Statement finalization failed', { error: finalizeErr.message });
+            }
+          });
+
           if (err) reject(err);
           else resolve();
         }
@@ -742,10 +770,24 @@ class CBDCOfflineGateway extends EventEmitter {
 
   async loadOfflineTransactions() {
     return new Promise((resolve, reject) => {
+      // Check database state
+      if (!this.offlineDb) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        reject(new Error('Database operation timeout'));
+      }, 10000); // 10 second timeout
+
       this.offlineDb.all(
         'SELECT * FROM offline_transactions WHERE status = ?',
         [OFFLINE_STATUS.QUEUED],
         (err, rows) => {
+          // Clear timeout
+          clearTimeout(timeout);
+          
           if (err) {
             reject(err);
           } else {
@@ -776,10 +818,24 @@ class CBDCOfflineGateway extends EventEmitter {
 
   async markTransactionSynced(transaction) {
     return new Promise((resolve, reject) => {
+      // Check database state
+      if (!this.offlineDb) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        reject(new Error('Database operation timeout'));
+      }, 10000); // 10 second timeout
+
       this.offlineDb.run(
         'UPDATE offline_transactions SET status = ?, synced_at = ? WHERE id = ?',
         [OFFLINE_STATUS.SYNCED, new Date().toISOString(), transaction.id],
         (err) => {
+          // Clear timeout
+          clearTimeout(timeout);
+          
           if (err) reject(err);
           else resolve();
         }
@@ -789,10 +845,24 @@ class CBDCOfflineGateway extends EventEmitter {
 
   async markTransactionFailed(transaction, errorMessage) {
     return new Promise((resolve, reject) => {
+      // Check database state
+      if (!this.offlineDb) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        reject(new Error('Database operation timeout'));
+      }, 10000); // 10 second timeout
+
       this.offlineDb.run(
         'UPDATE offline_transactions SET status = ?, error_message = ? WHERE id = ?',
         [OFFLINE_STATUS.FAILED, errorMessage, transaction.id],
         (err) => {
+          // Clear timeout
+          clearTimeout(timeout);
+          
           if (err) reject(err);
           else resolve();
         }
@@ -805,10 +875,24 @@ class CBDCOfflineGateway extends EventEmitter {
     const cutoffDate = new Date(Date.now() - this.config.offlineTimeout).toISOString();
     
     return new Promise((resolve, reject) => {
+      // Check database state
+      if (!this.offlineDb) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(() => {
+        reject(new Error('Database operation timeout'));
+      }, 10000); // 10 second timeout
+
       this.offlineDb.run(
         'DELETE FROM offline_transactions WHERE status = ? AND synced_at < ?',
         [OFFLINE_STATUS.SYNCED, cutoffDate],
         (err) => {
+          // Clear timeout
+          clearTimeout(timeout);
+          
           if (err) reject(err);
           else resolve();
         }
@@ -1099,7 +1183,13 @@ class CBDCOfflineGateway extends EventEmitter {
     // Close database connection
     if (this.offlineDb) {
       await new Promise((resolve, reject) => {
+        // Add timeout to prevent hanging during cleanup
+        const timeout = setTimeout(() => {
+          reject(new Error('Database cleanup timeout'));
+        }, 5000); // 5 second timeout for cleanup
+
         this.offlineDb.close((err) => {
+          clearTimeout(timeout);
           if (err) reject(err);
           else resolve();
         });
