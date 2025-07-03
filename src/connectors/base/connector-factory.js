@@ -15,6 +15,10 @@ const { BaseBankingConnector, TRANSACTION_STATUS, ERROR_CODES } = require('./bas
 
 // Import specific bank connectors
 const { TCSBaNCSConnector } = require('../tcs-bancs/bancs-connector');
+const { FiservDNAConnector } = require('../fiserv-dna/fiserv-dna-connector');
+const { FISSystematicsConnector } = require('../fis-systematics/fis-systematics-connector');
+const { FiservPremierConnector } = require('../fiserv-premier/fiserv-premier-connector');
+const { TemenosTransactConnector } = require('../temenos-transact/temenos-transact-connector');
 
 // Configure logger
 const logger = winston.createLogger({
@@ -34,11 +38,24 @@ const SUPPORTED_BANKS = {
   FINACLE: 'finacle',
   FLEXCUBE: 'flexcube',
   TEMENOS_T24: 'temenos-t24',
+  TEMENOS_TRANSACT: 'temenos-transact',
   FINASTRA_FUSION: 'finastra-fusion',
   MAMBU: 'mambu',
   AVALOQ: 'avaloq',
   SAP_BANKING: 'sap-banking',
+  
+  // FIS Systems
+  FIS_SYSTEMATICS: 'fis-systematics',
+  FIS_IBS: 'fis-ibs',
+  FIS_MBP: 'fis-mbp',
+  FIS_PROFILE: 'fis-profile',
+  
+  // Fiserv Systems
   FISERV_DNA: 'fiserv-dna',
+  FISERV_PREMIER: 'fiserv-premier',
+  FISERV_PRECISION: 'fiserv-precision',
+  FISERV_FINXACT: 'fiserv-finxact',
+  
   JACK_HENRY: 'jack-henry'
 };
 
@@ -169,6 +186,22 @@ class BankingConnectorFactory extends EventEmitter {
       switch (config.type) {
         case SUPPORTED_BANKS.TCS_BANCS:
           connector = new TCSBaNCSConnector(config);
+          break;
+        
+        case SUPPORTED_BANKS.FISERV_DNA:
+          connector = new FiservDNAConnector(config);
+          break;
+        
+        case SUPPORTED_BANKS.FIS_SYSTEMATICS:
+          connector = new FISSystematicsConnector(config);
+          break;
+        
+        case SUPPORTED_BANKS.FISERV_PREMIER:
+          connector = new FiservPremierConnector(config);
+          break;
+        
+        case SUPPORTED_BANKS.TEMENOS_TRANSACT:
+          connector = new TemenosTransactConnector(config);
           break;
         
         case SUPPORTED_BANKS.FINACLE:
