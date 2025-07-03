@@ -15,7 +15,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 // Import existing enhanced parser for FIS format support
-const { EnhancedSwiftParser } = require('../../adapters/enhanced-swift-parser');
+const { EnhancedSWIFTParser } = require('../../adapters/enhanced-swift-parser');
 
 // Configure logger
 const logger = winston.createLogger({
@@ -178,7 +178,7 @@ class FISSystematicsConnector extends BaseBankingConnector {
     this.lastActivity = null;
 
     // Enhanced parser instance for existing FIS support
-    this.parser = new EnhancedSwiftParser({
+    this.parser = new EnhancedSWIFTParser({
       enableValidation: true,
       enableMetrics: true
     });
