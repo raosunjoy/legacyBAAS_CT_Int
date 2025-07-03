@@ -98,6 +98,7 @@ class CBDCOfflineGateway extends EventEmitter {
       failedSyncs: 0,
       averageOfflineTime: 0,
       walletBalances: new Map(),
+      transactionVolume: new Map(),
       issuanceTotal: 0,
       circulatingSupply: 0
     };
@@ -224,38 +225,43 @@ class CBDCOfflineGateway extends EventEmitter {
     try {
       let blockchainResult;
 
-      switch (transaction.type) {
-        case CBDC_TRANSACTION_TYPES.ISSUE:
-          blockchainResult = await this.issueCBDC(transaction);
-          break;
-          
-        case CBDC_TRANSACTION_TYPES.TRANSFER:
-          blockchainResult = await this.transferCBDC(transaction);
-          break;
-          
-        case CBDC_TRANSACTION_TYPES.REDEEM:
-          blockchainResult = await this.redeemCBDC(transaction);
-          break;
-          
-        case CBDC_TRANSACTION_TYPES.EXCHANGE:
-          blockchainResult = await this.exchangeCBDC(transaction);
-          break;
-          
-        case CBDC_TRANSACTION_TYPES.BURN:
-          blockchainResult = await this.burnCBDC(transaction);
-          break;
-          
-        default:
-          throw new Error(`Unsupported CBDC transaction type: ${transaction.type}`);
+      // Handle Algorand integration if enabled and specified
+      if (this.config.enableAlgorandIntegration && transaction.blockchain === 'algorand') {
+        blockchainResult = await this.processAlgorandTransaction(transaction);
+      } else {
+        switch (transaction.type) {
+          case CBDC_TRANSACTION_TYPES.ISSUE:
+            blockchainResult = await this.issueCBDC(transaction);
+            break;
+            
+          case CBDC_TRANSACTION_TYPES.TRANSFER:
+            blockchainResult = await this.transferCBDC(transaction);
+            break;
+            
+          case CBDC_TRANSACTION_TYPES.REDEEM:
+            blockchainResult = await this.redeemCBDC(transaction);
+            break;
+            
+          case CBDC_TRANSACTION_TYPES.EXCHANGE:
+            blockchainResult = await this.exchangeCBDC(transaction);
+            break;
+            
+          case CBDC_TRANSACTION_TYPES.BURN:
+            blockchainResult = await this.burnCBDC(transaction);
+            break;
+            
+          default:
+            throw new Error(`Unsupported CBDC transaction type: ${transaction.type}`);
+        }
       }
 
       return {
         transactionId: transaction.id,
         status: 'confirmed',
         mode: 'online',
-        blockchainTxHash: blockchainResult.txHash,
+        blockchainTxHash: blockchainResult.txHash || blockchainResult.txId,
         blockNumber: blockchainResult.blockNumber,
-        confirmations: blockchainResult.confirmations || 1,
+        confirmations: blockchainResult.confirmations || (blockchainResult.confirmed ? 1 : 0),
         fees: blockchainResult.fees || 0,
         timestamp: new Date().toISOString(),
         processingTime: Date.now() - new Date(transaction.timestamp).getTime()
@@ -273,6 +279,16 @@ class CBDCOfflineGateway extends EventEmitter {
    */
   async processOfflineTransaction(transaction) {
     try {
+      // Check offline transaction limits
+      if (this.metrics.offlineTransactions >= this.config.maxOfflineTransactions) {
+        throw new Error('Offline transaction limit exceeded');
+      }
+
+      // Handle Crunchfish integration if enabled and proximity mode specified
+      if (this.config.enableCrunchfishIntegration && transaction.proximityMode) {
+        await this.processCrunchfishTransaction(transaction);
+      }
+
       // Generate offline transaction record
       const offlineRecord = {
         ...transaction,
@@ -614,7 +630,14 @@ class CBDCOfflineGateway extends EventEmitter {
       return this.isOnline;
 
     } catch (error) {
+      const wasOnline = this.isOnline;
       this.isOnline = false;
+      
+      // Emit disconnected event if state changed
+      if (wasOnline !== this.isOnline) {
+        this.emit('disconnected');
+      }
+      
       return false;
     }
   }
@@ -661,6 +684,7 @@ class CBDCOfflineGateway extends EventEmitter {
    */
   getStatus() {
     return {
+      gateway: 'CBDC Offline Gateway',
       isOnline: this.isOnline,
       isInitialized: this.isInitialized,
       syncInProgress: this.syncInProgress,
@@ -1021,12 +1045,12 @@ class CBDCOfflineGateway extends EventEmitter {
   updateMetrics(transaction, result, duration) {
     this.metrics.totalTransactions++;
     
-    if (result.mode === 'offline') {
+    if (!this.isOnline || result.status === OFFLINE_STATUS.QUEUED) {
       this.metrics.offlineTransactions++;
     }
 
     // Update average offline time
-    if (result.mode === 'offline') {
+    if (!this.isOnline || result.status === OFFLINE_STATUS.QUEUED) {
       this.metrics.averageOfflineTime = 
         (this.metrics.averageOfflineTime * (this.metrics.offlineTransactions - 1) + duration) / 
         this.metrics.offlineTransactions;
@@ -1060,6 +1084,12 @@ class CBDCOfflineGateway extends EventEmitter {
     
     return {
       status,
+      components: {
+        database: this.offlineDb ? 'healthy' : 'disconnected',
+        connectivity: this.isOnline ? 'online' : 'offline',
+        sync: this.syncInProgress ? 'active' : 'idle'
+      },
+      timestamp: new Date().toISOString(),
       isOnline: this.isOnline,
       offlineQueueSize: this.offlineQueue.length,
       metrics,
@@ -1119,17 +1149,6 @@ class CBDCOfflineGateway extends EventEmitter {
     };
   }
 
-  // Status method
-  getStatus() {
-    return {
-      gateway: 'CBDC Offline Gateway',
-      isOnline: this.isOnline,
-      isInitialized: this.isInitialized,
-      offlineQueueSize: this.offlineQueue.length,
-      syncInProgress: this.syncInProgress,
-      metrics: this.getMetrics()
-    };
-  }
 
   // Wallet balance management
   async getWalletBalance(walletAddress) {
