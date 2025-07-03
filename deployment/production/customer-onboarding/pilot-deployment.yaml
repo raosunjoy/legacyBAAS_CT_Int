@@ -1,0 +1,197 @@
+# Pilot Customer Deployment Configuration
+# Fortune 100 Customer Onboarding Framework
+
+# Customer Namespace Template
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: customer-${CUSTOMER_NAME}
+  labels:
+    customer: ${CUSTOMER_NAME}
+    tier: pilot
+    billing: enterprise
+---
+# Customer-Specific API Gateway
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: ${CUSTOMER_NAME}-gateway
+  namespace: customer-${CUSTOMER_NAME}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: ${CUSTOMER_NAME}-tls-cert
+    hosts:
+    - ${CUSTOMER_NAME}.legacybaas.com
+---
+# Customer API Rate Limiting
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: ${CUSTOMER_NAME}-rate-limit
+  namespace: customer-${CUSTOMER_NAME}
+spec:
+  host: legacy-baas-service.legacy-baas-production.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 10
+        maxRequestsPerConnection: 2
+    circuitBreaker:
+      consecutiveErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+---
+# Customer Service Account
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ${CUSTOMER_NAME}-service-account
+  namespace: customer-${CUSTOMER_NAME}
+  annotations:
+    customer.legacybaas.com/billing-tier: "enterprise"
+    customer.legacybaas.com/api-quota: "100000"
+    customer.legacybaas.com/support-level: "premium"
+---
+# Customer RBAC
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: customer-${CUSTOMER_NAME}
+  name: ${CUSTOMER_NAME}-role
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ${CUSTOMER_NAME}-role-binding
+  namespace: customer-${CUSTOMER_NAME}
+subjects:
+- kind: ServiceAccount
+  name: ${CUSTOMER_NAME}-service-account
+  namespace: customer-${CUSTOMER_NAME}
+roleRef:
+  kind: Role
+  name: ${CUSTOMER_NAME}-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# Customer Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ${CUSTOMER_NAME}-config
+  namespace: customer-${CUSTOMER_NAME}
+data:
+  customer.yaml: |
+    customer:
+      name: ${CUSTOMER_NAME}
+      tier: pilot
+      onboarding_date: ${ONBOARDING_DATE}
+      
+    api:
+      quota:
+        requests_per_minute: 10000
+        requests_per_day: 1000000
+        concurrent_connections: 100
+      
+    features:
+      swift_processing: true
+      multi_blockchain: true
+      bancs_integration: true
+      analytics_dashboard: true
+      real_time_monitoring: true
+      custom_reporting: true
+      
+    blockchain_networks:
+      - name: XRP
+        enabled: true
+        priority: high
+      - name: ETH_L2
+        enabled: true  
+        priority: medium
+      - name: ALGORAND
+        enabled: true
+        priority: low
+      - name: CORDA
+        enabled: false  # Enterprise feature
+        
+    compliance:
+      kyc_required: true
+      aml_screening: true
+      audit_logging: true
+      data_retention_days: 2555  # 7 years
+      
+    billing:
+      model: usage_based
+      currency: USD
+      invoice_frequency: monthly
+      payment_terms: net_30
+      
+    support:
+      level: premium
+      sla_response_time: 15_minutes
+      dedicated_engineer: true
+      
+    monitoring:
+      custom_dashboards: true
+      real_time_alerts: true
+      performance_reports: weekly
+      
+    security:
+      ssl_required: true
+      api_key_rotation: 90_days
+      ip_whitelist_enabled: true
+      mfa_required: true
+      
+    integration:
+      webhook_endpoints:
+        - transaction_completed
+        - transaction_failed
+        - account_updated
+        - compliance_alert
+      custom_callbacks: true
+      sandbox_environment: true
+---
+# Customer Monitoring
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: ${CUSTOMER_NAME}-monitor
+  namespace: customer-${CUSTOMER_NAME}
+spec:
+  selector:
+    matchLabels:
+      customer: ${CUSTOMER_NAME}
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
+    honorLabels: true
+---
+# Customer Secrets Template
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ${CUSTOMER_NAME}-secrets
+  namespace: customer-${CUSTOMER_NAME}
+type: Opaque
+data:
+  api-key: ${API_KEY_BASE64}
+  webhook-secret: ${WEBHOOK_SECRET_BASE64}
+  encryption-key: ${ENCRYPTION_KEY_BASE64}
+  db-password: ${DB_PASSWORD_BASE64}

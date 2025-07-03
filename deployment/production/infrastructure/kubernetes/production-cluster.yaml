@@ -1,0 +1,124 @@
+# Production Kubernetes Cluster Configuration
+# Banking Legacy-to-Blockchain B2BaaS Platform
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: legacy-baas-production
+  labels:
+    environment: production
+    app: legacy-baas
+---
+# Main Application Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-baas-app
+  namespace: legacy-baas-production
+  labels:
+    app: legacy-baas
+    tier: application
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: legacy-baas
+      tier: application
+  template:
+    metadata:
+      labels:
+        app: legacy-baas
+        tier: application
+    spec:
+      containers:
+      - name: legacy-baas
+        image: legacy-baas:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: DB_HOST
+          value: "postgres-service"
+        - name: REDIS_HOST
+          value: "redis-service"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+# Application Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-baas-service
+  namespace: legacy-baas-production
+spec:
+  selector:
+    app: legacy-baas
+    tier: application
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: ClusterIP
+---
+# Load Balancer
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-baas-loadbalancer
+  namespace: legacy-baas-production
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:region:account:certificate/cert-id"
+spec:
+  selector:
+    app: legacy-baas
+    tier: application
+  ports:
+  - protocol: TCP
+    port: 443
+    targetPort: 3000
+  type: LoadBalancer
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: legacy-baas-hpa
+  namespace: legacy-baas-production
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: legacy-baas-app
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

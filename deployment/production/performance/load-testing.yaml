@@ -1,0 +1,210 @@
+# Production Load Testing Configuration
+# Banking-Grade Performance Validation
+
+# K6 Load Testing Suite
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: load-test-scripts
+  namespace: legacy-baas-production
+data:
+  transaction-load-test.js: |
+    import http from 'k6/http';
+    import { check, sleep } from 'k6';
+    import { Counter, Rate, Trend } from 'k6/metrics';
+
+    // Custom metrics for banking operations
+    export let transactionErrors = new Counter('transaction_errors');
+    export let transactionRate = new Rate('transaction_success_rate');
+    export let transactionDuration = new Trend('transaction_duration');
+
+    // Load test configuration
+    export let options = {
+      stages: [
+        // Ramp up to target load
+        { duration: '5m', target: 100 },   // 100 concurrent users
+        { duration: '10m', target: 500 },  // 500 concurrent users
+        { duration: '15m', target: 1000 }, // 1000 concurrent users (peak)
+        { duration: '20m', target: 2000 }, // 2000 concurrent users (stress)
+        { duration: '10m', target: 1000 }, // Scale down
+        { duration: '5m', target: 0 },     // Cool down
+      ],
+      thresholds: {
+        http_req_duration: ['p(95)<1000'], // 95% of requests under 1s
+        http_req_rate: ['rate>0.9'],       // 90% success rate
+        transaction_success_rate: ['rate>0.98'], // 98% transaction success
+      },
+    };
+
+    // Test data
+    const baseUrl = 'https://api.legacybaas.com';
+    const authToken = __ENV.AUTH_TOKEN;
+
+    export default function () {
+      let params = {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      };
+
+      // Test 1: SWIFT Message Processing
+      let swiftPayload = {
+        messageType: 'MT103',
+        senderBic: 'TESTUS33',
+        receiverBic: 'TESTGB2L',
+        amount: Math.floor(Math.random() * 10000) + 100,
+        currency: 'USD',
+        reference: `TEST${Date.now()}`,
+      };
+
+      let swiftResponse = http.post(
+        `${baseUrl}/api/v1/swift/process`,
+        JSON.stringify(swiftPayload),
+        params
+      );
+
+      check(swiftResponse, {
+        'SWIFT processing status is 200': (r) => r.status === 200,
+        'SWIFT response time < 500ms': (r) => r.timings.duration < 500,
+      });
+
+      transactionRate.add(swiftResponse.status === 200);
+      transactionDuration.add(swiftResponse.timings.duration);
+
+      // Test 2: Multi-Blockchain Routing
+      let blockchainPayload = {
+        sourceNetwork: 'XRP',
+        targetNetwork: 'ETH_L2',
+        amount: Math.floor(Math.random() * 1000) + 10,
+        currency: 'USD',
+        priority: 'high',
+      };
+
+      let blockchainResponse = http.post(
+        `${baseUrl}/api/v1/blockchain/route`,
+        JSON.stringify(blockchainPayload),
+        params
+      );
+
+      check(blockchainResponse, {
+        'Blockchain routing status is 200': (r) => r.status === 200,
+        'Blockchain response time < 1s': (r) => r.timings.duration < 1000,
+      });
+
+      // Test 3: BaNCS Integration
+      let bancsPayload = {
+        accountNumber: `ACC${Math.floor(Math.random() * 1000000)}`,
+        transactionType: 'CREDIT',
+        amount: Math.floor(Math.random() * 5000) + 50,
+        currency: 'USD',
+      };
+
+      let bancsResponse = http.post(
+        `${baseUrl}/api/v1/bancs/transaction`,
+        JSON.stringify(bancsPayload),
+        params
+      );
+
+      check(bancsResponse, {
+        'BaNCS integration status is 200': (r) => r.status === 200,
+        'BaNCS response time < 2s': (r) => r.timings.duration < 2000,
+      });
+
+      // Test 4: Analytics Dashboard
+      let analyticsResponse = http.get(
+        `${baseUrl}/api/v1/analytics/dashboard`,
+        params
+      );
+
+      check(analyticsResponse, {
+        'Analytics status is 200': (r) => r.status === 200,
+        'Analytics response time < 300ms': (r) => r.timings.duration < 300,
+      });
+
+      sleep(1); // 1 second between iterations
+    }
+
+  stress-test.js: |
+    import http from 'k6/http';
+    import { check } from 'k6';
+
+    export let options = {
+      stages: [
+        { duration: '2m', target: 100 },
+        { duration: '5m', target: 100 },
+        { duration: '2m', target: 200 },
+        { duration: '5m', target: 200 },
+        { duration: '2m', target: 300 },
+        { duration: '5m', target: 300 },
+        { duration: '2m', target: 400 },
+        { duration: '5m', target: 400 },
+        { duration: '10m', target: 0 },
+      ],
+      thresholds: {
+        http_req_duration: ['p(99)<1500'],
+        http_req_failed: ['rate<0.1'],
+      },
+    };
+
+    export default function () {
+      const response = http.get('https://api.legacybaas.com/health');
+      check(response, { 'status was 200': (r) => r.status == 200 });
+    }
+
+  spike-test.js: |
+    import http from 'k6/http';
+    import { check } from 'k6';
+
+    export let options = {
+      stages: [
+        { duration: '10s', target: 100 },
+        { duration: '1m', target: 100 },
+        { duration: '10s', target: 1400 }, // Spike to 1400 users
+        { duration: '3m', target: 1400 },  // Stay at 1400 for 3 minutes
+        { duration: '10s', target: 100 },  // Scale down
+        { duration: '3m', target: 100 },
+        { duration: '10s', target: 0 },
+      ],
+    };
+
+    export default function () {
+      const response = http.get('https://api.legacybaas.com/api/v1/health');
+      check(response, { 'status was 200': (r) => r.status == 200 });
+    }
+---
+# Load Testing Job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-test-transaction-flow
+  namespace: legacy-baas-production
+spec:
+  template:
+    spec:
+      containers:
+      - name: k6
+        image: loadimpact/k6:latest
+        command: ['k6', 'run', '/scripts/transaction-load-test.js']
+        env:
+        - name: AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: load-test-secrets
+              key: auth-token
+        volumeMounts:
+        - name: load-test-scripts
+          mountPath: /scripts
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: load-test-scripts
+        configMap:
+          name: load-test-scripts
+      restartPolicy: Never
+  backoffLimit: 3
