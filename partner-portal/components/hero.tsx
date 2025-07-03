@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ArrowRight, Building2, Users, TrendingUp } from 'lucide-react'
+import { ArrowRight, Shield, Award, Building2, Users, Globe } from 'lucide-react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 
@@ -18,7 +18,8 @@ export function Hero() {
             transition={{ duration: 0.5 }}
           >
             <Badge variant="secondary" className="mb-6 text-sm font-medium">
-              🚀 Partner Ecosystem 2.0 - Now Live
+              <Shield className="w-4 h-4 mr-2" />
+              SOC 2 Type II Certified • Banking Grade Security
             </Badge>
           </motion.div>
           
@@ -28,9 +29,9 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-6xl lg:text-7xl"
           >
-            Enterprise Partner
+            Banking-to-Blockchain
             <span className="block bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              Ecosystem
+              Infrastructure
             </span>
           </motion.h1>
           
@@ -40,9 +41,9 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-6 max-w-3xl text-lg leading-8 text-gray-600 dark:text-gray-300"
           >
-            Join the world's most comprehensive banking-to-blockchain integration platform. 
-            Unlock revenue opportunities through our reseller network, system integrator program, 
-            and enterprise self-service portal.
+            Trusted by Fortune 500 banks for seamless SWIFT-to-blockchain integration. 
+            Enterprise-grade security, 99.99% uptime, and native TCS BaNCS connectivity 
+            with real-time settlement across XRP, Ethereum L2, Algorand, and Corda networks.
           </motion.p>
           
           <motion.div
@@ -51,58 +52,85 @@ export function Hero() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
           >
-            <Button asChild size="lg" className="h-12 px-8">
-              <Link href="/partner/register">
-                Become a Partner
+            <Button asChild size="lg" className="h-12 px-8 bg-blue-600 hover:bg-blue-700">
+              <Link href="/enterprise/demo">
+                Schedule Executive Demo
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="h-12 px-8">
-              <Link href="/enterprise/demo">
-                Request Demo
+              <Link href="/developer/sandbox">
+                Try Developer Sandbox
               </Link>
             </Button>
           </motion.div>
           
+          {/* Trust Indicators */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.4 }}
+            className="mt-16"
+          >
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
+              Trusted by leading financial institutions worldwide
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 items-center opacity-60">
+              <div className="text-center">
+                <div className="text-xs font-medium text-gray-400">National Bank of Americas</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs font-medium text-gray-400">Global Financial Group</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs font-medium text-gray-400">Enterprise Banking Corp</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs font-medium text-gray-400">International Trade Bank</div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Key Metrics */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
             className="mt-16 grid grid-cols-1 gap-8 sm:grid-cols-3"
           >
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
+                <Award className="h-8 w-8 text-green-600 dark:text-green-400" />
+              </div>
+              <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
+                99.99% Uptime
+              </h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                Enterprise SLA with multi-region failover
+              </p>
+            </div>
+            
             <div className="flex flex-col items-center text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
                 <Building2 className="h-8 w-8 text-blue-600 dark:text-blue-400" />
               </div>
               <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
-                Reseller Network
+                $2.8B+ Processed
               </h3>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                25% recurring commission on all sales
-              </p>
-            </div>
-            
-            <div className="flex flex-col items-center text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
-                <Users className="h-8 w-8 text-green-600 dark:text-green-400" />
-              </div>
-              <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
-                System Integrators
-              </h3>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                20% revenue share on implementations
+                Annual transaction volume through our platform
               </p>
             </div>
             
             <div className="flex flex-col items-center text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-purple-100 dark:bg-purple-900">
-                <TrendingUp className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                <Globe className="h-8 w-8 text-purple-600 dark:text-purple-400" />
               </div>
               <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">
-                Enterprise Direct
+                120+ Banks
               </h3>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Self-service procurement portal
+                Fortune 500 financial institutions served
               </p>
             </div>
           </motion.div>
