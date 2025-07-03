@@ -1,0 +1,13 @@
+README.md
+setup.py
+legacybaas/__init__.py
+legacybaas/client.py
+legacybaas_python_sdk.egg-info/PKG-INFO
+legacybaas_python_sdk.egg-info/SOURCES.txt
+legacybaas_python_sdk.egg-info/dependency_links.txt
+legacybaas_python_sdk.egg-info/entry_points.txt
+legacybaas_python_sdk.egg-info/requires.txt
+legacybaas_python_sdk.egg-info/top_level.txt
+tests/test_blockchain.py
+tests/test_client.py
+tests/test_swift.py

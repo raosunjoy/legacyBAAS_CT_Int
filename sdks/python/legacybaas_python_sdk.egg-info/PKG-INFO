@@ -1,0 +1,112 @@
+Metadata-Version: 2.4
+Name: legacybaas-python-sdk
+Version: 1.0.0
+Summary: Banking Legacy-to-Blockchain B2BaaS Platform SDK for Python
+Home-page: https://github.com/legacybaas/python-sdk
+Author: Legacy B2BaaS Platform
+Author-email: sdk@legacybaas.com
+Project-URL: Bug Tracker, https://github.com/legacybaas/python-sdk/issues
+Project-URL: Documentation, https://docs.legacybaas.com/sdks/python
+Project-URL: Homepage, https://legacybaas.com
+Keywords: banking,blockchain,b2baas,swift,payments,legacy-banking,multi-blockchain,financial-services,sdk,api-client,fintech
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Financial and Insurance Industry
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Office/Business :: Financial
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Internet :: WWW/HTTP :: Dynamic Content
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Requires-Dist: requests>=2.31.0
+Requires-Dist: aiohttp>=3.8.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: typing-extensions>=4.5.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
+Requires-Dist: responses>=0.23.0; extra == "dev"
+Requires-Dist: black>=23.0.0; extra == "dev"
+Requires-Dist: isort>=5.12.0; extra == "dev"
+Requires-Dist: flake8>=6.0.0; extra == "dev"
+Requires-Dist: mypy>=1.0.0; extra == "dev"
+Requires-Dist: sphinx>=6.0.0; extra == "dev"
+Requires-Dist: sphinx-rtd-theme>=1.2.0; extra == "dev"
+Provides-Extra: async
+Requires-Dist: aiohttp>=3.8.0; extra == "async"
+Requires-Dist: asyncio-mqtt>=0.11.0; extra == "async"
+Provides-Extra: django
+Requires-Dist: django>=4.0.0; extra == "django"
+Requires-Dist: djangorestframework>=3.14.0; extra == "django"
+Provides-Extra: flask
+Requires-Dist: flask>=2.2.0; extra == "flask"
+Requires-Dist: flask-restful>=0.3.9; extra == "flask"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: project-url
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
+
+# Legacy B2BaaS Python SDK
+
+Banking Legacy-to-Blockchain B2BaaS Platform SDK for Python
+
+## Installation
+
+```bash
+pip install legacybaas-python-sdk
+```
+
+## Quick Start
+
+```python
+from legacybaas import LegacyBaaSClient
+
+client = LegacyBaaSClient(api_key="your-api-key")
+
+# Process SWIFT MT103 message
+mt103 = {
+    "transaction_reference": "TXN123456",
+    "currency": "USD",
+    "amount": 10000.00,
+    "ordering_customer": {
+        "account": "123456789",
+        "name": "John Doe"
+    },
+    "beneficiary_customer": {
+        "account": "987654321",
+        "name": "Jane Smith"
+    }
+}
+
+result = client.swift.process_mt103(mt103)
+print(f"Transaction ID: {result.transaction_id}")
+```
+
+## Features
+
+- SWIFT message processing (MT103, MT202, MT700)
+- Multi-blockchain routing and transactions
+- BaNCS integration for legacy banking systems
+- Real-time analytics and monitoring
+- Webhook support for event notifications
+- Async/await support for high-performance applications
+
+## Documentation
+
+For complete documentation, visit [https://docs.legacybaas.com/sdks/python](https://docs.legacybaas.com/sdks/python)
