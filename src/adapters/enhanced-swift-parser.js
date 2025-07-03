@@ -559,9 +559,11 @@ class EnhancedSWIFTParser {
       compliance.requiredChecks.push('enhanced_due_diligence');
     }
 
-    if (fields.purpose && 
-        (fields.purpose.toLowerCase().includes('cash') || 
-         fields.purpose.toLowerCase().includes('currency'))) {
+    // Check for cash-related transactions in purpose field
+    const purpose = fields.purpose || fields.remittance_information || compliance.transactionData.purpose;
+    if (purpose && 
+        (purpose.toLowerCase().includes('cash') || 
+         purpose.toLowerCase().includes('currency'))) {
       compliance.riskIndicators.push('cash_related');
       compliance.requiredChecks.push('aml_screening');
     }
@@ -591,13 +593,13 @@ class EnhancedSWIFTParser {
       case 'ethereum':
         return {
           to: parsedMessage.receiver?.account || fields.receiverAccount,
-          value: parsedMessage.amount || fields.amount,
+          value: parsedMessage.amount || fields.amount || (fields.value_date_currency_amount && fields.value_date_currency_amount.amount),
           data: this.encodeEthereumData(parsedMessage),
           gasLimit: 21000,
           metadata: {
-            currency: parsedMessage.currency || fields.currency,
-            purpose: parsedMessage.remittanceInfo || fields.purpose,
-            sender: parsedMessage.sender?.name || fields.senderName
+            currency: parsedMessage.currency || fields.currency || (fields.value_date_currency_amount && fields.value_date_currency_amount.currency),
+            purpose: parsedMessage.remittanceInfo || fields.purpose || fields.remittance_information,
+            sender: parsedMessage.sender?.name || fields.senderName || fields.ordering_customer
           }
         };
 
@@ -607,14 +609,14 @@ class EnhancedSWIFTParser {
           Account: parsedMessage.sender?.account || fields.senderAccount,
           Destination: parsedMessage.receiver?.account || fields.receiverAccount,
           Amount: {
-            currency: parsedMessage.currency || fields.currency,
-            value: parsedMessage.amount || fields.amount,
+            currency: parsedMessage.currency || fields.currency || (fields.value_date_currency_amount && fields.value_date_currency_amount.currency),
+            value: parsedMessage.amount || fields.amount || (fields.value_date_currency_amount && fields.value_date_currency_amount.amount),
             issuer: parsedMessage.orderingInstitution || fields.ordering_institution
           },
           Memos: [{
             Memo: {
               MemoType: Buffer.from('purpose', 'utf8').toString('hex'),
-              MemoData: Buffer.from(parsedMessage.remittanceInfo || fields.purpose || '', 'utf8').toString('hex')
+              MemoData: Buffer.from(parsedMessage.remittanceInfo || fields.purpose || fields.remittance_information || '', 'utf8').toString('hex')
             }
           }]
         };
@@ -625,9 +627,9 @@ class EnhancedSWIFTParser {
           args: [
             parsedMessage.sender?.account || fields.senderAccount,
             parsedMessage.receiver?.account || fields.receiverAccount,
-            parsedMessage.amount || fields.amount,
-            parsedMessage.currency || fields.currency,
-            parsedMessage.remittanceInfo || fields.purpose || '',
+            parsedMessage.amount || fields.amount || (fields.value_date_currency_amount && fields.value_date_currency_amount.amount),
+            parsedMessage.currency || fields.currency || (fields.value_date_currency_amount && fields.value_date_currency_amount.currency),
+            parsedMessage.remittanceInfo || fields.purpose || fields.remittance_information || '',
             parsedMessage.parseMetadata?.parseId || 'unknown'
           ],
           chaincode: 'banking-chaincode'
@@ -699,8 +701,9 @@ class EnhancedSWIFTParser {
     const patterns = {
       '20': /:20:([A-Z0-9]+)/,
       '32A': /:32A:(\d{6})([A-Z]{3})(\d+,\d{2})/,
-      '50K': /:50K:\/(.+)\n\s*(.+)/,
-      '59': /:59:\/(.+)\n\s*(.+)/,
+      '50K': /:50K:(\/(.+)\n\s*(.+)|(.+))/,
+      '50': /:50:(\/(.+)\n\s*(.+)|(.+))/,
+      '59': /:59:(\/(.+)\n\s*(.+)|(.+))/,
       // Add more patterns as needed
     };
     return patterns[fieldCode] || new RegExp(`:${fieldCode}:(.+)`);
@@ -715,6 +718,19 @@ class EnhancedSWIFTParser {
         amount: match[3]
       };
     }
+    
+    // Handle fields with flexible patterns (50, 50K, 59)
+    if (fieldCode === '50' || fieldCode === '50K' || fieldCode === '59') {
+      // Check if it matched the account/name pattern or just name pattern
+      if (match[2] && match[3]) {
+        // Pattern with account: /account\nname
+        return match[3]; // Return the name part
+      } else if (match[4]) {
+        // Pattern without account: name
+        return match[4];
+      }
+    }
+    
     return match[1] || match[0];
   }
 
