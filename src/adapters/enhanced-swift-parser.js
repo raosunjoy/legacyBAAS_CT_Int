@@ -515,32 +515,45 @@ class EnhancedSWIFTParser {
     const fields = parsedMessage.fields;
 
     // Extract customer information
-    if (fields.senderName || fields.ordering_customer) {
+    if (fields.senderName || fields.ordering_customer || fields.applicant) {
       compliance.customerData.sender = {
-        name: fields.senderName || fields.ordering_customer,
+        name: fields.senderName || fields.ordering_customer || fields.applicant,
         account: fields.senderAccount
       };
       compliance.requiredChecks.push('sender_kyc');
     }
 
-    if (fields.receiverName || fields.beneficiary_customer) {
+    if (fields.receiverName || fields.beneficiary_customer || fields.beneficiary) {
       compliance.customerData.receiver = {
-        name: fields.receiverName || fields.beneficiary_customer,
+        name: fields.receiverName || fields.beneficiary_customer || fields.beneficiary,
         account: fields.receiverAccount
       };
       compliance.requiredChecks.push('receiver_kyc');
     }
 
+    // For securities transactions (MT515), check safekeeping account
+    if (fields.safekeeping_account) {
+      compliance.customerData.sender = {
+        account: fields.safekeeping_account,
+        name: 'Account Holder' // Generic name for safekeeping account
+      };
+      compliance.requiredChecks.push('sender_kyc');
+      compliance.requiredChecks.push('securities_compliance');
+    }
+
     // Extract transaction information from parsed message
     compliance.transactionData = {
-      amount: parsedMessage.amount || fields.amount,
-      currency: parsedMessage.currency || fields.currency,
+      amount: parsedMessage.amount || fields.amount || (fields.value_date_currency_amount && fields.value_date_currency_amount.amount),
+      currency: parsedMessage.currency || fields.currency || (fields.value_date_currency_amount && fields.value_date_currency_amount.currency),
       purpose: parsedMessage.remittanceInfo || fields.purpose || fields.remittance_information,
-      valueDate: parsedMessage.valueDate || fields.valueDate || fields.value_date_currency_amount
+      valueDate: parsedMessage.valueDate || fields.valueDate || (fields.value_date_currency_amount && fields.value_date_currency_amount.valueDate),
+      // For securities transactions
+      securityId: fields.security_identification,
+      quantity: fields.quantity_of_financial_instrument
     };
 
     // Risk indicators based on amount and purpose
-    const amount = parseFloat(parsedMessage.amount || fields.amount || 0);
+    const amount = parseFloat(parsedMessage.amount || fields.amount || (fields.value_date_currency_amount && fields.value_date_currency_amount.amount) || 0);
     if (amount > 10000) {
       compliance.riskIndicators.push('high_value_transaction');
       compliance.requiredChecks.push('enhanced_due_diligence');
@@ -551,6 +564,12 @@ class EnhancedSWIFTParser {
          fields.purpose.toLowerCase().includes('currency'))) {
       compliance.riskIndicators.push('cash_related');
       compliance.requiredChecks.push('aml_screening');
+    }
+
+    // Add trade finance specific compliance for MT700
+    if (parsedMessage.messageType === 'MT700') {
+      compliance.requiredChecks.push('aml_screening');
+      compliance.requiredChecks.push('trade_finance_compliance');
     }
 
     // Add sanctions screening requirement

@@ -112,7 +112,7 @@ class TCSBaNCSIntegrationService extends EventEmitter {
    */
   async preprocessTransaction(transaction, context = {}) {
     const processingId = uuidv4();
-    const startTime = Date.now();
+    const startTime = process.hrtime.bigint();
 
     let result = {
       processingId,
@@ -149,6 +149,14 @@ class TCSBaNCSIntegrationService extends EventEmitter {
       if (!result.stages.validation.passed) {
         result.status = 'rejected';
         result.rejectionReason = result.stages.validation.errors.join(', ');
+        result.processingTime = Math.max(1, Number((process.hrtime.bigint() - startTime) / BigInt(1000000)));
+        
+        // Update statistics
+        this.processingStats.totalProcessed++;
+        this.processingStats.failedValidations++;
+        this.processingStats.averageProcessingTime = 
+          (this.processingStats.averageProcessingTime * (this.processingStats.totalProcessed - 1) + 
+           result.processingTime) / this.processingStats.totalProcessed;
         
         this.emit(INTEGRATION_EVENTS.TRANSACTION_REJECTED, result);
         return result;
@@ -161,6 +169,14 @@ class TCSBaNCSIntegrationService extends EventEmitter {
       if (!result.stages.accountVerification.passed) {
         result.status = 'rejected';
         result.rejectionReason = result.stages.accountVerification.reason;
+        result.processingTime = Math.max(1, Number((process.hrtime.bigint() - startTime) / BigInt(1000000)));
+        
+        // Update statistics
+        this.processingStats.totalProcessed++;
+        this.processingStats.failedValidations++;
+        this.processingStats.averageProcessingTime = 
+          (this.processingStats.averageProcessingTime * (this.processingStats.totalProcessed - 1) + 
+           result.processingTime) / this.processingStats.totalProcessed;
         
         this.emit(INTEGRATION_EVENTS.TRANSACTION_REJECTED, result);
         return result;
@@ -173,8 +189,15 @@ class TCSBaNCSIntegrationService extends EventEmitter {
       if (!result.stages.compliance.passed) {
         result.status = 'compliance_failed';
         result.rejectionReason = result.stages.compliance.reason;
+        result.processingTime = Math.max(1, Number((process.hrtime.bigint() - startTime) / BigInt(1000000)));
         
+        // Update statistics
+        this.processingStats.totalProcessed++;
         this.processingStats.complianceFailures++;
+        this.processingStats.averageProcessingTime = 
+          (this.processingStats.averageProcessingTime * (this.processingStats.totalProcessed - 1) + 
+           result.processingTime) / this.processingStats.totalProcessed;
+        
         this.emit(INTEGRATION_EVENTS.COMPLIANCE_FAILED, result);
         
         // Return immediately for any compliance failure
@@ -193,7 +216,7 @@ class TCSBaNCSIntegrationService extends EventEmitter {
 
       // Final status
       result.status = 'validated';
-      result.processingTime = Date.now() - startTime;
+      result.processingTime = Math.max(1, Number((process.hrtime.bigint() - startTime) / BigInt(1000000)));
       
       // Update statistics
       this.processingStats.totalProcessed++;
@@ -228,7 +251,7 @@ class TCSBaNCSIntegrationService extends EventEmitter {
         transactionId: transaction.id,
         status: 'error',
         error: error.message,
-        processingTime: Date.now() - startTime,
+        processingTime: Math.max(1, Number((process.hrtime.bigint() - startTime) / BigInt(1000000))),
         timestamp: new Date().toISOString()
       };
     } finally {
@@ -364,7 +387,8 @@ class TCSBaNCSIntegrationService extends EventEmitter {
         // Check if this is a service availability error that should bubble up
         if (error.message.includes('service unavailable') || 
             error.message.includes('network error') || 
-            error.message.includes('timeout')) {
+            error.message.includes('timeout') ||
+            error.message.includes('Database connection failed')) {
           // Re-throw service errors to be caught by outer exception handler
           throw error;
         }
@@ -406,6 +430,15 @@ class TCSBaNCSIntegrationService extends EventEmitter {
             error: error.message 
           });
           
+          // Check if this is a service availability error that should bubble up
+          if (error.message.includes('service unavailable') || 
+              error.message.includes('network error') || 
+              error.message.includes('timeout') ||
+              error.message.includes('Database connection failed')) {
+            // Re-throw service errors to be caught by outer exception handler
+            throw error;
+          }
+          
           verifications.receiver = {
             exists: false,
             error: error.message
@@ -432,7 +465,8 @@ class TCSBaNCSIntegrationService extends EventEmitter {
       // Check if this is a service availability error that should bubble up
       if (error.message.includes('service unavailable') || 
           error.message.includes('network error') || 
-          error.message.includes('timeout')) {
+          error.message.includes('timeout') ||
+          error.message.includes('Database connection failed')) {
         // Re-throw service errors to be caught by outer exception handler
         throw error;
       }
@@ -511,18 +545,20 @@ class TCSBaNCSIntegrationService extends EventEmitter {
   async prepareForRouting(transaction, preprocessingResult) {
     try {
       const routingData = {
+        // Banking context at top level
+        bankingContext: {
+          senderBank: this.config.bankCode,
+          senderBranch: this.config.branchCode,
+          accountVerified: preprocessingResult.stages.accountVerification.passed,
+          complianceCleared: preprocessingResult.stages.compliance.passed,
+          availableBalance: preprocessingResult.stages.accountVerification.verifications.senderBalance?.availableBalance
+        },
+
         // Enhanced transaction data
         enhancedTransaction: {
           ...transaction,
           preprocessingId: preprocessingResult.processingId,
-          validationStatus: preprocessingResult.status,
-          bankingContext: {
-            senderBank: this.config.bankCode,
-            senderBranch: this.config.branchCode,
-            accountVerified: preprocessingResult.stages.accountVerification.passed,
-            complianceCleared: preprocessingResult.stages.compliance.passed,
-            availableBalance: preprocessingResult.stages.accountVerification.verifications.senderBalance?.availableBalance
-          }
+          validationStatus: preprocessingResult.status
         },
 
         // Routing hints
@@ -632,7 +668,10 @@ class TCSBaNCSIntegrationService extends EventEmitter {
     }
 
     // Cross-border risk
-    if (transaction.receiver.bic && transaction.receiver.bic.substring(4, 6) !== 'US') {
+    if (transaction.receiver && 
+        transaction.receiver.bic && 
+        transaction.receiver.bic.length >= 6 &&
+        transaction.receiver.bic.substring(4, 6) !== 'US') {
       factors.push('cross_border');
       score += 20;
     }
