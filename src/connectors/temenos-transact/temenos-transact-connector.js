@@ -102,6 +102,22 @@ const TRANSACT_ACCOUNT_CATEGORIES = {
 };
 
 /**
+ * Temenos Supported Currencies
+ */
+const TRANSACT_CURRENCIES = {
+  EUR: { code: 'EUR', name: 'Euro', symbol: '€', decimals: 2 },
+  USD: { code: 'USD', name: 'US Dollar', symbol: '$', decimals: 2 },
+  GBP: { code: 'GBP', name: 'British Pound', symbol: '£', decimals: 2 },
+  CHF: { code: 'CHF', name: 'Swiss Franc', symbol: 'CHF', decimals: 2 },
+  JPY: { code: 'JPY', name: 'Japanese Yen', symbol: '¥', decimals: 0 },
+  CAD: { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$', decimals: 2 },
+  AUD: { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', decimals: 2 },
+  SEK: { code: 'SEK', name: 'Swedish Krona', symbol: 'kr', decimals: 2 },
+  NOK: { code: 'NOK', name: 'Norwegian Krone', symbol: 'kr', decimals: 2 },
+  DKK: { code: 'DKK', name: 'Danish Krone', symbol: 'kr', decimals: 2 }
+};
+
+/**
  * Temenos Transact Connector Implementation
  * Provides integration with Temenos Transact core banking platform
  */
@@ -157,6 +173,7 @@ class TemenosTransactConnector extends BaseBankingConnector {
     this.accessToken = null;
     this.sessionToken = null;
     this.tokenExpiry = null;
+    this.isAuthenticated = false;
 
     // HTTP client
     this.httpClient = axios.create({
@@ -176,14 +193,17 @@ class TemenosTransactConnector extends BaseBankingConnector {
     this.customerCache = new Map();
     this.currencyCache = new Map();
     
+    // Request tracking
+    this.requestTimes = [];
+    
     // Temenos-specific metrics
     this.transactMetrics = {
-      t24Transactions: 0,
+      europeanTransactions: 0,
       sepaTransactions: 0,
-      swiftTransactions: 0,
+      swiftGPITransactions: 0,
       complianceChecks: 0,
-      currencyConversions: 0,
-      workflowExecutions: 0
+      multiCurrencyTransactions: 0,
+      t24LegacyOperations: 0
     };
 
     logger.info('Temenos Transact connector initialized', {
@@ -233,6 +253,7 @@ class TemenosTransactConnector extends BaseBankingConnector {
       });
 
       this.sessionToken = sessionResponse.data.sessionToken;
+      this.isAuthenticated = true;
 
       logger.info('Temenos authentication successful', {
         tokenType: response.data.token_type,
@@ -245,7 +266,7 @@ class TemenosTransactConnector extends BaseBankingConnector {
         error: error.message,
         status: error.response?.status
       });
-      throw new Error(`Temenos authentication failed: ${error.message}`);
+      throw new Error(`Transact authentication failed: ${error.message}`);
     }
   }
 
@@ -302,20 +323,21 @@ class TemenosTransactConnector extends BaseBankingConnector {
       const accountData = response.data;
 
       const result = {
-        accountNumber: accountData.accountId,
-        accountType: this.mapTransactAccountType(accountData.category),
-        accountStatus: this.mapTransactAccountStatus(accountData.accountStatus),
+        accountNumber: accountData.accountNumber || accountData.accountId,
+        accountType: accountData.accountType || this.mapTransactAccountType(accountData.category),
+        accountStatus: this.mapTransactAccountStatus(accountData.status),
         customerId: accountData.customerId,
         productLine: accountData.productLine,
         currency: accountData.currency,
-        openDate: accountData.openingDate,
-        currentBalance: parseFloat(accountData.workingBalance || 0),
-        availableBalance: parseFloat(accountData.availableBalance || 0),
+        openDate: accountData.openDate || accountData.openingDate,
+        balance: parseFloat(accountData.balance?.available || accountData.availableBalance || 0),
+        currentBalance: parseFloat(accountData.balance?.current || accountData.workingBalance || 0),
+        availableBalance: parseFloat(accountData.balance?.available || accountData.availableBalance || 0),
         clearedBalance: parseFloat(accountData.clearedBalance || 0),
         interestRate: parseFloat(accountData.interestRate || 0),
         overdraftLimit: parseFloat(accountData.overdraftLimit || 0),
         branchCode: accountData.branchCode,
-        accountTitle: accountData.accountTitle,
+        accountTitle: accountData.accountTitle || accountData.accountName,
         jointHolders: accountData.jointHolders || [],
         restrictions: accountData.restrictions || [],
         postingRestrictions: accountData.postingRestrictions || []
@@ -357,17 +379,25 @@ class TemenosTransactConnector extends BaseBankingConnector {
 
       const balanceData = response.data;
 
+      // Handle multi-currency response structure
+      const multiCurrencyBalances = balanceData.balances || [];
+      const targetBalance = multiCurrencyBalances.find(b => b.currency === currency) || 
+                           balanceData.balances?.[0] || 
+                           balanceData;
+
       return {
         accountNumber,
-        currency: currency || balanceData.currency,
-        workingBalance: parseFloat(balanceData.workingBalance || 0),
-        availableBalance: parseFloat(balanceData.availableBalance || 0),
-        clearedBalance: parseFloat(balanceData.clearedBalance || 0),
-        blockedBalance: parseFloat(balanceData.blockedBalance || 0),
-        forwardAvailableBalance: parseFloat(balanceData.forwardAvailableBalance || 0),
-        overdraftLimit: parseFloat(balanceData.overdraftLimit || 0),
+        currency: currency || targetBalance.currency || balanceData.currency,
+        balance: parseFloat(targetBalance.available || targetBalance.availableBalance || 0),
+        workingBalance: parseFloat(targetBalance.current || targetBalance.workingBalance || 0),
+        availableBalance: parseFloat(targetBalance.available || targetBalance.availableBalance || 0),
+        clearedBalance: parseFloat(targetBalance.clearedBalance || 0),
+        blockedBalance: parseFloat(targetBalance.blockedBalance || 0),
+        forwardAvailableBalance: parseFloat(targetBalance.forwardAvailableBalance || 0),
+        overdraftLimit: parseFloat(targetBalance.overdraftLimit || 0),
+        multiCurrencyBalances: multiCurrencyBalances,
         valueDated: balanceData.valueDated,
-        lastMovement: balanceData.lastMovementDate
+        lastMovement: balanceData.lastMovementDate || balanceData.lastUpdated
       };
 
     } catch (error) {
@@ -391,7 +421,8 @@ class TemenosTransactConnector extends BaseBankingConnector {
         isValid: true,
         errors: [],
         warnings: [],
-        temenosChecks: []
+        temenosChecks: [],
+        complianceChecks: []
       };
 
       await this.ensureAuthenticated();
@@ -430,12 +461,18 @@ class TemenosTransactConnector extends BaseBankingConnector {
       }
 
       // SEPA validation for EUR transactions
-      if (transaction.currency === 'EUR' && transaction.isInternational) {
+      if (transaction.currency === 'EUR') {
         const sepaValidation = await this.validateSEPATransaction(transaction);
         if (!sepaValidation.isValid) {
           validation.warnings.push('SEPA validation issues detected');
         }
         validation.temenosChecks.push('SEPA validation completed');
+        validation.complianceChecks.push('SEPA_VALIDATION');
+      }
+
+      // European compliance check
+      if (transaction.amount > 1000 || transaction.currency === 'EUR') {
+        validation.complianceChecks.push('EUROPEAN_COMPLIANCE');
       }
 
       return validation;
@@ -479,18 +516,33 @@ class TemenosTransactConnector extends BaseBankingConnector {
       });
 
       const result = response.data;
-      this.transactMetrics.t24Transactions++;
+      this.transactMetrics.t24LegacyOperations++;
+      
+      // Track European transactions if EUR currency
+      if (result.currency === 'EUR') {
+        this.transactMetrics.europeanTransactions++;
+      }
+      
+      // Track SEPA transactions
+      if (result.currency === 'EUR' && transaction.isInternational) {
+        this.transactMetrics.sepaTransactions++;
+      }
 
       return {
         transactionId: result.transactionId,
         status: this.mapTransactTransactionStatus(result.status),
         amount: parseFloat(result.amount),
         currency: result.currency,
-        processedAt: result.processingDate,
+        processedAt: result.processingDate || result.executionTime,
         valueDate: result.valueDate,
         reference: result.customerReference,
         narrative: result.narrative,
-        newBalance: parseFloat(result.newBalance || 0)
+        newBalance: parseFloat(result.newBalance || 0),
+        fromAccount: result.fromAccount || transaction.fromAccount,
+        toAccount: result.toAccount || transaction.toAccount,
+        sepaReference: result.sepaReference,
+        swiftGPIReference: result.swiftGPIReference,
+        complianceStatus: result.complianceStatus
       };
 
     } catch (error) {
@@ -532,18 +584,40 @@ class TemenosTransactConnector extends BaseBankingConnector {
       });
 
       const result = response.data;
-      this.transactMetrics.t24Transactions++;
+      this.transactMetrics.t24LegacyOperations++;
+      
+      // Track European transactions if EUR currency
+      if (result.currency === 'EUR') {
+        this.transactMetrics.europeanTransactions++;
+      }
+      
+      // Track multi-currency transactions
+      if (result.currency !== this.transactConfig.baseCurrency) {
+        this.transactMetrics.multiCurrencyTransactions++;
+      }
+      
+      // Track SWIFT GPI transactions
+      if (transaction.enableSWIFTGPI) {
+        this.transactMetrics.swiftGPITransactions++;
+      }
 
       return {
         transactionId: result.transactionId,
         status: this.mapTransactTransactionStatus(result.status),
         amount: parseFloat(result.amount),
         currency: result.currency,
-        processedAt: result.processingDate,
+        processedAt: result.processingDate || result.executionTime,
         valueDate: result.valueDate,
         reference: result.customerReference,
         narrative: result.narrative,
-        newBalance: parseFloat(result.newBalance || 0)
+        newBalance: parseFloat(result.newBalance || 0),
+        fromAccount: result.fromAccount || transaction.fromAccount,
+        toAccount: result.toAccount || transaction.toAccount,
+        swiftGPIReference: result.swiftGPIReference,
+        trackingReference: result.trackingReference,
+        exchangeRate: result.exchangeRate,
+        convertedAmount: result.convertedAmount,
+        convertedCurrency: result.convertedCurrency
       };
 
     } catch (error) {
@@ -704,6 +778,86 @@ class TemenosTransactConnector extends BaseBankingConnector {
   }
 
   /**
+   * Get health status
+   * @returns {Promise<Object>}
+   */
+  async getHealthStatus() {
+    try {
+      await this.ensureAuthenticated();
+      
+      const response = await this.httpClient.get('/health', {
+        headers: {
+          'X-Session-Token': this.sessionToken
+        }
+      });
+
+      return {
+        status: 'healthy',
+        details: {
+          transactCore: response.data.status === 'healthy' ? 'active' : 'inactive',
+          t24Legacy: this.transactConfig.enableT24Bridge ? 'connected' : 'disabled',
+          europeanBanking: 'operational',
+          sepaService: this.transactConfig.enableSEPA ? 'active' : 'disabled',
+          swiftGpi: this.transactConfig.enableSWIFTGPI ? 'active' : 'disabled',
+          complianceEngine: 'active'
+        },
+        version: response.data.version || '2023.12',
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      return {
+        status: 'degraded',
+        details: {
+          transactCore: 'inactive',
+          t24Legacy: 'unknown',
+          europeanBanking: 'unknown',
+          sepaService: 'unknown',
+          swiftGpi: 'unknown',
+          complianceEngine: 'unknown'
+        },
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * Cleanup resources
+   * @returns {Promise<void>}
+   */
+  async cleanup() {
+    try {
+      // Logout and invalidate session
+      if (this.sessionToken) {
+        await this.httpClient.delete('/session', {
+          headers: {
+            'X-Session-Token': this.sessionToken
+          }
+        });
+      }
+
+      // Clear tokens and authentication state
+      this.accessToken = null;
+      this.sessionToken = null;
+      this.tokenExpiry = null;
+      this.isAuthenticated = false;
+
+      // Clear caches
+      this.accountCache.clear();
+      this.customerCache.clear();
+      this.currencyCache.clear();
+
+      // Update connection status
+      this.isConnected = false;
+
+      logger.info('Temenos Transact connector cleanup completed');
+    } catch (error) {
+      logger.warn('Cleanup error (ignored)', { error: error.message });
+    }
+  }
+
+  /**
    * Get enhanced status with Temenos metrics
    * @returns {Object}
    */
@@ -738,5 +892,6 @@ module.exports = {
   TemenosTransactConnector,
   TRANSACT_ENDPOINTS,
   TRANSACT_TRANSACTION_TYPES,
-  TRANSACT_ACCOUNT_CATEGORIES
+  TRANSACT_ACCOUNT_CATEGORIES,
+  TRANSACT_CURRENCIES
 };

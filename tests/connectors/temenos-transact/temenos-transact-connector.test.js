@@ -259,6 +259,7 @@ describe('TemenosTransactConnector - Complete Test Suite', () => {
   describe('Transaction Processing', () => {
     beforeEach(() => {
       connector.accessToken = 'TRANSACT_TOKEN_001';
+      connector.sessionToken = 'SESSION_TOKEN_001';
       connector.tokenExpiry = Date.now() + 3600000;
       connector.isAuthenticated = true;
     });
