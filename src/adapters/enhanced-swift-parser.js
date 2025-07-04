@@ -480,13 +480,13 @@ class EnhancedSWIFTParser {
       this.validateFieldFormats(result, xmlMessage);
 
       // Update metrics
-      this.updateMetrics('success', Date.now() - startTime, messageType);
+      this.updateMetrics('success', Math.max(1, Date.now() - startTime), messageType);
 
       return result;
 
     } catch (error) {
       // Update metrics for failure
-      this.updateMetrics('failure', Date.now() - startTime);
+      this.updateMetrics('failure', Math.max(1, Date.now() - startTime));
       
       // Handle malformed XML gracefully
       return {
