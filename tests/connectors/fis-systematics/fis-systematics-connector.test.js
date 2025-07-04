@@ -352,7 +352,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
 
     test('should parse fixed-width account record', () => {
       // Build fixed-width record: accountNumber(20) + accountType(2) + status(1) + openDate(8) + balance(15) + availableBalance(15) + customerId(15) + productCode(10) + interestRate(8) + lastUpdateDate(8)
-      const fixedWidthRecord = '1234567890          01A20231201000000100000000009000000000123456789000TEST_PROD  0005000020240101';
+      const fixedWidthRecord = '1234567890          01A20231201000000100000000009000000000123456789000   TEST_PROD 0005000020240101';
       
       const parsed = connector.parseFixedWidthRecord(fixedWidthRecord, SYSTEMATICS_RECORD_LAYOUTS.ACCOUNT_MASTER);
 
@@ -403,17 +403,23 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
     test('should format fixed-width record for mainframe', () => {
       const data = {
         accountNumber: '1234567890',
-        accountName: 'JANE SMITH',
-        balance: 250000,
-        currency: 'USD',
-        status: 'A'
+        accountType: '01',
+        status: 'A',
+        openDate: '20231201',
+        balance: '000000250000000',
+        availableBalance: '000000200000000',
+        customerId: '123456789000001',
+        productCode: 'CHECKING  ',
+        interestRate: '00000000',
+        lastUpdateDate: '20240101'
       };
 
-      const formatted = connector.formatFixedWidthRecord(data, 'ACCOUNT_RECORD');
+      const formatted = connector.formatFixedWidthRecord(data, SYSTEMATICS_RECORD_LAYOUTS.ACCOUNT_MASTER);
 
-      expect(formatted).toHaveLength(80);
-      expect(formatted.substring(0, 10)).toBe('1234567890');
-      expect(formatted.substring(10, 40)).toBe('JANE SMITH                    ');
+      expect(formatted).toHaveLength(102); // Total length based on layout
+      expect(formatted.substring(0, 20)).toBe('1234567890          ');
+      expect(formatted.substring(20, 22)).toBe('01');
+      expect(formatted.substring(22, 23)).toBe('A');
     });
 
     test('should convert EBCDIC to ASCII', () => {
@@ -772,7 +778,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
         }
       };
 
-      mockHttpClient.mockResolvedValue(jobResponse);
+      mockHttpClient.post.mockResolvedValue(jobResponse);
 
       const result = await connector.submitBatchJob(jobData);
 

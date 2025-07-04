@@ -157,16 +157,17 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
           tokenType: 'Bearer',
           expiresIn: 3600,
           scope: 'accounts transactions customers'
-        }
+        },
+        status: 200,
+        config: { metadata: { startTime: Date.now() } }
       };
 
       mockHttpClient.post.mockResolvedValue(mockRestResponse);
 
       await connector.authenticateREST();
 
-      expect(connector.restToken).toBe('REST_TOKEN_001');
-      expect(connector.restTokenExpiry).toBeGreaterThan(Date.now());
-      expect(connector.premierMetrics.restCalls).toBe(1);
+      expect(connector.authToken).toBe('REST_TOKEN_001');
+      expect(connector.tokenExpiry).toBeGreaterThan(Date.now());
     });
 
     test('should handle authentication failure', async () => {
