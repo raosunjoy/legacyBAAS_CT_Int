@@ -1418,7 +1418,7 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
         Date.now() - 5000   // 5 seconds old
       ];
 
-      await connector.checkRateLimit();
+      connector.cleanupRequestTimes();
 
       // Should only keep requests from last minute
       expect(connector.requestTimes.length).toBe(2);
@@ -1492,12 +1492,18 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
         timestamp: '2023-12-01T10:00:00Z'
       };
 
+      // Set up cache data to be invalidated
+      const cacheKey = connector.getCacheKey('balance', notification.accountNumber);
+      connector.balanceCache.set(cacheKey, { balance: 1000.00, timestamp: Date.now() });
+      
+      // Verify cache is initially populated
+      expect(connector.balanceCache.has(cacheKey)).toBe(true);
+
       await connector.handleRealTimeNotification(notification);
 
       expect(connector.dnaMetrics.realTimeRequests).toBe(1);
       
       // Should invalidate balance cache
-      const cacheKey = connector.getCacheKey('balance', notification.accountNumber);
       expect(connector.balanceCache.has(cacheKey)).toBe(false);
     });
 

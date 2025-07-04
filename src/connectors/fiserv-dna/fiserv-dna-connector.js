@@ -168,6 +168,7 @@ class FiservDNAConnector extends BaseBankingConnector {
 
     // Account details cache
     this.accountCache = new Map();
+    this.balanceCache = new Map();
     this.customerCache = new Map();
     this.complianceCache = new Map();
     
@@ -687,50 +688,85 @@ class FiservDNAConnector extends BaseBankingConnector {
    * @returns {Promise<Object>}
    */
   async makeApiCall(method, endpoint, data = {}) {
-    // Check rate limiting
-    await this.checkRateLimit();
+    const maxRetries = this.dnaConfig.maxRetries || 3;
+    let lastError;
 
-    // Refresh token if needed
-    if (Date.now() >= this.tokenExpiry - 60000) { // Refresh 1 minute before expiry
-      await this.authenticate();
-    }
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Check rate limiting
+        await this.checkRateLimit();
 
-    try {
-      this.dnaMetrics.apiCalls++;
-      const startTime = Date.now();
-      
-      const config = {
-        method: method.toLowerCase(),
-        url: endpoint,
-        headers: {
-          'X-Request-ID': uuidv4(),
-          'X-Timestamp': new Date().toISOString()
-        },
-        metadata: { startTime }
-      };
+        // Refresh token if needed
+        if (Date.now() >= this.tokenExpiry - 60000) { // Refresh 1 minute before expiry
+          await this.authenticate();
+        }
 
-      if (method.toUpperCase() === 'GET') {
-        config.params = data.params;
-      } else {
-        config.data = data;
+        this.dnaMetrics.apiCalls++;
+        const startTime = Date.now();
+        
+        const config = {
+          method: method.toLowerCase(),
+          url: endpoint,
+          headers: {
+            'X-Request-ID': uuidv4(),
+            'X-Timestamp': new Date().toISOString()
+          },
+          metadata: { startTime }
+        };
+
+        if (method.toUpperCase() === 'GET') {
+          config.params = data.params;
+        } else {
+          config.data = data;
+        }
+
+        const response = await this.httpClient(config);
+        
+        this.updateMetrics('success', startTime);
+        return response;
+
+      } catch (error) {
+        lastError = error;
+        
+        // Check if this is a retryable error
+        const isRetryable = this.isRetryableError(error);
+        
+        if (attempt === maxRetries || !isRetryable) {
+          this.updateMetrics('failure');
+          
+          // Enhanced error handling for DNA-specific errors
+          if (error.response && error.response.data) {
+            const dnaError = this.mapDNAError(error.response.data);
+            throw new Error(dnaError.message);
+          }
+          
+          throw error;
+        }
+
+        // Wait before retry with exponential backoff
+        const retryDelay = this.dnaConfig.retryDelay || 2000;
+        await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
       }
-
-      const response = await this.httpClient(config);
-      
-      this.updateMetrics('success', startTime);
-      return response;
-
-    } catch (error) {
-      this.updateMetrics('failure');
-      
-      // Enhanced error handling for DNA-specific errors
-      if (error.response && error.response.data) {
-        const dnaError = this.mapDNAError(error.response.data);
-        throw new Error(dnaError.message);
-      }
-      
-      throw error;
     }
+  }
+
+  /**
+   * Check if error is retryable
+   * @param {Error} error
+   * @returns {boolean}
+   */
+  isRetryableError(error) {
+    // Network errors, timeouts, and 5xx status codes are retryable
+    if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+      return true;
+    }
+    
+    if (error.response) {
+      const status = error.response.status;
+      return status >= 500 || status === 429; // Server errors and rate limiting
+    }
+    
+    return false;
   }
 
   /**
@@ -770,6 +806,7 @@ class FiservDNAConnector extends BaseBankingConnector {
       'PROCESSING': TRANSACTION_STATUS.PROCESSING,
       'COMPLETED': TRANSACTION_STATUS.CONFIRMED,
       'APPROVED': TRANSACTION_STATUS.AUTHORIZED,
+      'AUTHORIZED': TRANSACTION_STATUS.AUTHORIZED,
       'SETTLED': TRANSACTION_STATUS.SETTLED,
       'FAILED': TRANSACTION_STATUS.FAILED,
       'REJECTED': TRANSACTION_STATUS.REJECTED,
@@ -788,7 +825,12 @@ class FiservDNAConnector extends BaseBankingConnector {
     const errorMap = {
       'INSUFFICIENT_FUNDS': ERROR_CODES.INSUFFICIENT_FUNDS,
       'INVALID_ACCOUNT': ERROR_CODES.INVALID_ACCOUNT,
+      'ACCOUNT_CLOSED': ERROR_CODES.ACCOUNT_INACTIVE,
+      'DUPLICATE_TRANSACTION': ERROR_CODES.DUPLICATE_TRANSACTION,
+      'EXCEEDS_LIMIT': ERROR_CODES.LIMIT_EXCEEDED,
+      'AUTHENTICATION_FAILED': ERROR_CODES.AUTHENTICATION_FAILED,
       'AUTHENTICATION_ERROR': ERROR_CODES.AUTHENTICATION_FAILED,
+      'AUTHORIZATION_FAILED': ERROR_CODES.AUTHORIZATION_FAILED,
       'RATE_LIMIT_EXCEEDED': ERROR_CODES.RATE_LIMIT_EXCEEDED,
       'SERVICE_UNAVAILABLE': ERROR_CODES.SERVICE_UNAVAILABLE
     };
@@ -938,6 +980,21 @@ class FiservDNAConnector extends BaseBankingConnector {
   }
 
   /**
+   * Get cache key with optional data
+   * @param {string} prefix 
+   * @param {string} identifier 
+   * @param {Object} data 
+   * @returns {string}
+   */
+  getCacheKey(prefix, identifier, data = null) {
+    let key = `${prefix}:${identifier}`;
+    if (data) {
+      key += `:${JSON.stringify(data)}`;
+    }
+    return key;
+  }
+
+  /**
    * Check cache validity
    * @param {Object} cacheEntry 
    * @param {number} maxAge 
@@ -952,6 +1009,7 @@ class FiservDNAConnector extends BaseBankingConnector {
    */
   clearAllCaches() {
     this.accountCache.clear();
+    this.balanceCache.clear();
     this.customerCache.clear();
     this.complianceCache.clear();
   }
@@ -969,6 +1027,12 @@ class FiservDNAConnector extends BaseBankingConnector {
       }
     }
 
+    for (const [key, entry] of this.balanceCache.entries()) {
+      if (now - entry.timestamp > maxAge) {
+        this.balanceCache.delete(key);
+      }
+    }
+
     for (const [key, entry] of this.customerCache.entries()) {
       if (now - entry.timestamp > maxAge) {
         this.customerCache.delete(key);
@@ -980,6 +1044,13 @@ class FiservDNAConnector extends BaseBankingConnector {
         this.complianceCache.delete(key);
       }
     }
+  }
+
+  /**
+   * Alias for clearExpiredCaches (singular form for test compatibility)
+   */
+  clearExpiredCache() {
+    return this.clearExpiredCaches();
   }
 
   /**
@@ -995,8 +1066,21 @@ class FiservDNAConnector extends BaseBankingConnector {
    * Handle real-time notifications
    * @param {Object} notification 
    */
-  handleRealTimeNotification(notification) {
+  async handleRealTimeNotification(notification) {
     try {
+      this.dnaMetrics.realTimeRequests = (this.dnaMetrics.realTimeRequests || 0) + 1;
+      
+      // Handle different notification types
+      if (notification.type === 'balance_update' && notification.accountNumber) {
+        // Invalidate balance cache for the account
+        const cacheKey = this.getCacheKey('balance', notification.accountNumber);
+        this.balanceCache.delete(cacheKey);
+        
+        // Invalidate related account cache too
+        const accountCacheKey = this.getCacheKey('account', notification.accountNumber);
+        this.accountCache.delete(accountCacheKey);
+      }
+      
       this.emit('notification', notification);
       logger.info('Real-time notification received', { type: notification.type });
     } catch (error) {
@@ -1025,6 +1109,27 @@ class FiservDNAConnector extends BaseBankingConnector {
 
     } catch (error) {
       logger.error('Batch operations failed', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Batch check balances for multiple accounts
+   * @param {Array} accountNumbers 
+   * @returns {Promise<Array>}
+   */
+  async batchCheckBalances(accountNumbers) {
+    try {
+      const batchRequest = {
+        operation: 'checkBalance',
+        accounts: accountNumbers
+      };
+
+      const response = await this.makeApiCall('POST', '/batch', batchRequest);
+      return response.data.results || [];
+
+    } catch (error) {
+      logger.error('Batch balance check failed', { error: error.message });
       throw error;
     }
   }
