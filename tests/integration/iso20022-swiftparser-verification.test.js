@@ -62,7 +62,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
       </DbtrAgt>
       <CdtTrfTxInf>
         <PmtId>
-          <EndToEndId>E2E123456789</PmtId>
+          <EndToEndId>E2E123456789</EndToEndId>
         </PmtId>
         <Amt>
           <InstdAmt Ccy="EUR">1000.00</InstdAmt>
@@ -230,7 +230,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
     test('should support pain.001 (Customer Credit Transfer Initiation)', async () => {
       const message = iso20022TestMessages.pain001;
       
-      const result = await swiftParser.parseISO20022Message(message.xml);
+      const result = await swiftParser.parseISO20022(message.xml);
       
       expect(result.messageType).toBe('pain.001.001.03');
       expect(result.isValid).toBe(true);
@@ -243,7 +243,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
     test('should support pacs.008 (Financial Institution Credit Transfer)', async () => {
       const message = iso20022TestMessages.pacs008;
       
-      const result = await swiftParser.parseISO20022Message(message.xml);
+      const result = await swiftParser.parseISO20022(message.xml);
       
       expect(result.messageType).toBe('pacs.008.001.02');
       expect(result.isValid).toBe(true);
@@ -255,7 +255,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
     test('should support camt.053 (Bank to Customer Statement)', async () => {
       const message = iso20022TestMessages.camt053;
       
-      const result = await swiftParser.parseISO20022Message(message.xml);
+      const result = await swiftParser.parseISO20022(message.xml);
       
       expect(result.messageType).toBe('camt.053.001.02');
       expect(result.isValid).toBe(true);
@@ -334,7 +334,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
     test('should validate mandatory fields in pain.001', async () => {
       const message = iso20022TestMessages.pain001;
       
-      const result = await swiftParser.parseISO20022Message(message.xml);
+      const result = await swiftParser.parseISO20022(message.xml);
       
       expect(result.validation.mandatoryFields).toEqual(
         expect.arrayContaining([
@@ -352,7 +352,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
     test('should validate namespace and schema compliance', async () => {
       const message = iso20022TestMessages.pain001;
       
-      const result = await swiftParser.parseISO20022Message(message.xml);
+      const result = await swiftParser.parseISO20022(message.xml);
       
       expect(result.validation.namespaceCompliant).toBe(true);
       expect(result.validation.schemaVersion).toBe('pain.001.001.03');
@@ -364,7 +364,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
         .replace('<MsgId>MSG123456789</MsgId>', '') // Remove mandatory field
         .replace('pain.001.001.03', 'pain.001.001.99'); // Invalid version
 
-      const result = await swiftParser.parseISO20022Message(invalidMessage);
+      const result = await swiftParser.parseISO20022(invalidMessage);
       
       expect(result.isValid).toBe(false);
       expect(result.validation.errors).toEqual(
@@ -451,7 +451,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
       
       const startTime = Date.now();
       const results = await Promise.all(
-        messages.map(message => swiftParser.parseISO20022Message(message))
+        messages.map(message => swiftParser.parseISO20022(message))
       );
       const endTime = Date.now();
       
@@ -469,7 +469,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
 
       const startTime = Date.now();
       const results = await Promise.all(
-        concurrentMessages.map(message => swiftParser.parseISO20022Message(message))
+        concurrentMessages.map(message => swiftParser.parseISO20022(message))
       );
       const endTime = Date.now();
 
@@ -559,7 +559,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
     test('should handle malformed XML gracefully', async () => {
       const malformedXML = '<Document><InvalidXML></Document>';
       
-      const result = await swiftParser.parseISO20022Message(malformedXML);
+      const result = await swiftParser.parseISO20022(malformedXML);
       
       expect(result.isValid).toBe(false);
       expect(result.errors).toEqual(
@@ -574,7 +574,7 @@ describe('ISO 20022 SwiftParser Verification', () => {
         .replace('EUR', 'XXX') // Invalid currency
         .replace('1000.00', 'invalid_amount'); // Invalid amount format
 
-      const result = await swiftParser.parseISO20022Message(invalidMessage);
+      const result = await swiftParser.parseISO20022(invalidMessage);
       
       expect(result.isValid).toBe(false);
       expect(result.validation.fieldErrors).toEqual(
@@ -594,9 +594,9 @@ describe('ISO 20022 SwiftParser Verification', () => {
 
   describe('ISO 20022 Metrics and Monitoring', () => {
     test('should collect comprehensive parsing metrics', async () => {
-      await swiftParser.parseISO20022Message(iso20022TestMessages.pain001.xml);
-      await swiftParser.parseISO20022Message(iso20022TestMessages.pacs008.xml);
-      await swiftParser.parseISO20022Message(iso20022TestMessages.camt053.xml);
+      await swiftParser.parseISO20022(iso20022TestMessages.pain001.xml);
+      await swiftParser.parseISO20022(iso20022TestMessages.pacs008.xml);
+      await swiftParser.parseISO20022(iso20022TestMessages.camt053.xml);
 
       const metrics = swiftParser.getISO20022Metrics();
       
