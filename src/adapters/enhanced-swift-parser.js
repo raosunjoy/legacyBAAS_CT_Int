@@ -376,6 +376,7 @@ class EnhancedSWIFTParser {
    * @returns {Object} Parsed SWIFT message
    */
   async parseSWIFTMessage(message, messageType) {
+    const startTime = Date.now();
     const fields = SWIFT_FIELDS[messageType];
     if (!fields) {
       throw new Error(`Unsupported SWIFT message type: ${messageType}`);
@@ -403,6 +404,9 @@ class EnhancedSWIFTParser {
 
     // Add use case classification
     result.useCase = this.classifyUseCase(messageType, result.fields);
+
+    // Update metrics
+    this.updateMetrics('success', Date.now() - startTime, messageType);
 
     return result;
   }
@@ -533,6 +537,73 @@ class EnhancedSWIFTParser {
   }
 
   /**
+   * Parse TCS BaNCS flat file format
+   * @param {string} flatFileData - BaNCS flat file data
+   * @returns {Object} Parsed BaNCS message
+   */
+  async parseBANCSFlatFile(flatFileData) {
+    if (!flatFileData || !flatFileData.trim()) {
+      throw new Error('Empty BaNCS flat file data provided');
+    }
+
+    // BaNCS flat file format specification (pipe-delimited)
+    const lines = flatFileData.trim().split('\n');
+    const header = lines[0];
+    const records = lines.slice(1);
+    
+    const result = {
+      messageType: 'BANCS_FLAT',
+      standard: 'TCS_BANCS',
+      header: this.parseBANCSHeader(header),
+      transactions: [],
+      bankingSystem: 'TCS_BANCS',
+      useCase: 'batch_processing'
+    };
+
+    for (const record of records) {
+      if (record.trim()) {
+        result.transactions.push(this.parseBANCSRecord(record));
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Parse TCS BaNCS API JSON response
+   * @param {string} jsonData - BaNCS JSON response
+   * @returns {Object} Parsed BaNCS message
+   */
+  async parseBANCSJSON(jsonData) {
+    try {
+      const bancsData = JSON.parse(jsonData);
+
+      return {
+        messageType: 'BANCS_JSON',
+        standard: 'TCS_BANCS',
+        fields: {
+          transactionId: bancsData.txnId || bancsData.transactionId,
+          amount: bancsData.amount || bancsData.txnAmount,
+          currency: bancsData.currency || bancsData.ccy,
+          senderAccount: bancsData.debitAccount || bancsData.fromAccount,
+          receiverAccount: bancsData.creditAccount || bancsData.toAccount,
+          senderName: bancsData.debitCustomer || bancsData.fromCustomer,
+          receiverName: bancsData.creditCustomer || bancsData.toCustomer,
+          purpose: bancsData.purpose || bancsData.narrative,
+          valueDate: bancsData.valueDate || bancsData.processingDate,
+          status: bancsData.status || bancsData.txnStatus,
+          reference: bancsData.reference || bancsData.txnRef
+        },
+        bankingSystem: 'TCS_BANCS',
+        useCase: this.classifyBANCSUseCase(bancsData)
+      };
+
+    } catch (error) {
+      throw new Error(`BaNCS JSON parsing failed: ${error.message}`);
+    }
+  }
+
+  /**
    * Parse FIS fixed-width format (Systematics)
    * @param {string} fixedWidthData - FIS fixed-width record
    * @returns {Object} Parsed FIS message
@@ -575,6 +646,78 @@ class EnhancedSWIFTParser {
   }
 
   /**
+   * Parse FIS Profile JSON format
+   * @param {string} jsonData - FIS Profile JSON message
+   * @returns {Object} Parsed FIS message
+   */
+  async parseFISJSON(jsonData) {
+    try {
+      const fisData = JSON.parse(jsonData);
+
+      return {
+        messageType: 'FIS_JSON',
+        standard: 'FIS_SYSTEMATICS',
+        fields: {
+          transactionId: fisData.transactionId || fisData.txnId,
+          amount: fisData.amount || fisData.transactionAmount,
+          currency: fisData.currency || fisData.currencyCode,
+          senderAccount: fisData.fromAccount || fisData.debitAccount,
+          receiverAccount: fisData.toAccount || fisData.creditAccount,
+          senderName: fisData.fromCustomer || fisData.debitCustomer,
+          receiverName: fisData.toCustomer || fisData.creditCustomer,
+          purpose: fisData.purpose || fisData.description,
+          valueDate: fisData.valueDate || fisData.effectiveDate,
+          status: fisData.status || fisData.transactionStatus,
+          batchId: fisData.batchId || fisData.batchNumber,
+          systemCode: fisData.systemCode || fisData.productCode
+        },
+        bankingSystem: 'FIS',
+        useCase: this.classifyFISUseCase(fisData)
+      };
+
+    } catch (error) {
+      throw new Error(`FIS JSON parsing failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Parse FIS delimited file format
+   * @param {string} delimitedData - FIS delimited file data
+   * @returns {Object} Parsed FIS message
+   */
+  async parseFISDelimited(delimitedData) {
+    // FIS delimited format specification (comma or tab delimited)
+    const delimiter = delimitedData.includes('\t') ? '\t' : ',';
+    const lines = delimitedData.trim().split('\n');
+    const header = lines[0].split(delimiter);
+    const records = lines.slice(1);
+    
+    const result = {
+      messageType: 'FIS_DELIMITED',
+      standard: 'FIS_SYSTEMATICS',
+      header: header,
+      transactions: [],
+      bankingSystem: 'FIS',
+      useCase: 'batch_processing'
+    };
+
+    for (const record of records) {
+      if (record.trim()) {
+        const values = record.split(delimiter);
+        const transaction = {};
+        
+        header.forEach((fieldName, index) => {
+          transaction[fieldName.toLowerCase().replace(/\s+/g, '_')] = values[index] || null;
+        });
+        
+        result.transactions.push(transaction);
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Parse Temenos JSON format
    * @param {string} jsonData - Temenos JSON message
    * @returns {Object} Parsed Temenos message
@@ -604,6 +747,223 @@ class EnhancedSWIFTParser {
     } catch (error) {
       throw new Error(`Temenos JSON parsing failed: ${error.message}`);
     }
+  }
+
+  /**
+   * Parse Temenos XML format
+   * @param {string} xmlData - Temenos XML message
+   * @returns {Object} Parsed Temenos message
+   */
+  async parseTemenosXML(xmlData) {
+    try {
+      const parser = new xml2js.Parser();
+      const temenosData = await parser.parseStringPromise(xmlData);
+
+      return {
+        messageType: 'TEMENOS_XML',
+        standard: 'TEMENOS_TRANSACT',
+        fields: {
+          transactionId: this.extractXMLValue(temenosData, 'Transaction.TransactionId') || this.extractXMLValue(temenosData, 'Transaction.Id'),
+          amount: this.extractXMLValue(temenosData, 'Transaction.Amount') || this.extractXMLValue(temenosData, 'Transaction.TransactionAmount'),
+          currency: this.extractXMLValue(temenosData, 'Transaction.Currency') || this.extractXMLValue(temenosData, 'Transaction.CurrencyCode'),
+          senderAccount: this.extractXMLValue(temenosData, 'Transaction.DebitAccount') || this.extractXMLValue(temenosData, 'Transaction.FromAccount'),
+          receiverAccount: this.extractXMLValue(temenosData, 'Transaction.CreditAccount') || this.extractXMLValue(temenosData, 'Transaction.ToAccount'),
+          senderName: this.extractXMLValue(temenosData, 'Transaction.DebitCustomer') || this.extractXMLValue(temenosData, 'Transaction.FromCustomer'),
+          receiverName: this.extractXMLValue(temenosData, 'Transaction.CreditCustomer') || this.extractXMLValue(temenosData, 'Transaction.ToCustomer'),
+          purpose: this.extractXMLValue(temenosData, 'Transaction.Narrative') || this.extractXMLValue(temenosData, 'Transaction.Description'),
+          valueDate: this.extractXMLValue(temenosData, 'Transaction.ValueDate') || this.extractXMLValue(temenosData, 'Transaction.ProcessingDate'),
+          status: this.extractXMLValue(temenosData, 'Transaction.Status'),
+          productCode: this.extractXMLValue(temenosData, 'Transaction.ProductCode')
+        },
+        bankingSystem: 'TEMENOS',
+        useCase: this.classifyTemenosXMLUseCase(temenosData)
+      };
+
+    } catch (error) {
+      throw new Error(`Temenos XML parsing failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Parse SEPA format
+   * @param {string} sepaData - SEPA message (XML format)
+   * @returns {Object} Parsed SEPA message
+   */
+  async parseSEPA(sepaData) {
+    try {
+      const parser = new xml2js.Parser();
+      const sepaXml = await parser.parseStringPromise(sepaData);
+
+      // Handle xml2js array structure
+      const getText = (obj) => {
+        if (!obj) return null;
+        if (typeof obj === 'string') return obj;
+        if (Array.isArray(obj) && obj.length > 0) return obj[0];
+        if (obj._) return obj._;
+        return null;
+      };
+
+      const doc = sepaXml.Document || sepaXml;
+      const cstmrCdtTrfInitn = Array.isArray(doc.CstmrCdtTrfInitn) ? doc.CstmrCdtTrfInitn[0] : doc.CstmrCdtTrfInitn;
+      const grpHdr = Array.isArray(cstmrCdtTrfInitn.GrpHdr) ? cstmrCdtTrfInitn.GrpHdr[0] : cstmrCdtTrfInitn.GrpHdr;
+      const pmtInf = Array.isArray(cstmrCdtTrfInitn.PmtInf) ? cstmrCdtTrfInitn.PmtInf[0] : cstmrCdtTrfInitn.PmtInf;
+
+      return {
+        messageType: 'SEPA',
+        standard: 'SEPA',
+        fields: {
+          messageId: getText(grpHdr.MsgId),
+          creationDateTime: getText(grpHdr.CreDtTm),
+          numberOfTransactions: getText(grpHdr.NbOfTxs),
+          controlSum: getText(grpHdr.CtrlSum),
+          currency: 'EUR', // SEPA is always EUR
+          debtorName: getText((Array.isArray(pmtInf.Dbtr) ? pmtInf.Dbtr[0] : pmtInf.Dbtr).Nm),
+          debtorIBAN: getText((Array.isArray(pmtInf.DbtrAcct) ? pmtInf.DbtrAcct[0] : pmtInf.DbtrAcct).Id.IBAN),
+          debtorBIC: getText((Array.isArray(pmtInf.DbtrAgt) ? pmtInf.DbtrAgt[0] : pmtInf.DbtrAgt).FinInstnId.BIC)
+        },
+        bankingSystem: 'SEPA',
+        useCase: 'sepa_credit_transfer',
+        compliance: {
+          sepaCompliant: true,
+          euRegulatory: true
+        }
+      };
+
+    } catch (error) {
+      throw new Error(`SEPA parsing failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Parse ACH/NACHA format
+   * @param {string} nachData - NACHA file format
+   * @returns {Object} Parsed NACHA message
+   */
+  async parseACHNACHA(nachData) {
+    const lines = nachData.trim().split('\n');
+    const result = {
+      messageType: 'ACH_NACHA',
+      standard: 'ACH_NACHA',
+      fileHeader: null,
+      batches: [],
+      bankingSystem: 'ACH',
+      useCase: 'ach_payment'
+    };
+
+    for (const line of lines) {
+      const recordType = line.substring(0, 1);
+      
+      switch (recordType) {
+        case '1': // File Header
+          result.fileHeader = this.parseNACHAFileHeader(line);
+          break;
+        case '5': // Batch Header
+          result.batches.push({
+            header: this.parseNACHABatchHeader(line),
+            entries: []
+          });
+          break;
+        case '6': // Entry Detail
+          if (result.batches.length > 0) {
+            result.batches[result.batches.length - 1].entries.push(
+              this.parseNACHAEntryDetail(line)
+            );
+          }
+          break;
+        case '8': // Batch Control
+          if (result.batches.length > 0) {
+            result.batches[result.batches.length - 1].control = 
+              this.parseNACHABatchControl(line);
+          }
+          break;
+        case '9': // File Control
+          result.fileControl = this.parseNACHAFileControl(line);
+          break;
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Parse EDIFACT format
+   * @param {string} edifactData - EDIFACT message
+   * @returns {Object} Parsed EDIFACT message
+   */
+  async parseEDIFACT(edifactData) {
+    // EDIFACT uses segments separated by apostrophes
+    const segments = edifactData.split('\'');
+    const result = {
+      messageType: 'EDIFACT',
+      standard: 'EDIFACT',
+      segments: {},
+      fields: {},
+      bankingSystem: 'EDIFACT',
+      useCase: 'edi_payment'
+    };
+
+    for (const segment of segments) {
+      if (segment.trim()) {
+        const elements = segment.split('+');
+        const segmentTag = elements[0];
+        
+        result.segments[segmentTag] = elements.slice(1);
+        
+        // Extract common payment fields
+        switch (segmentTag) {
+          case 'UNH': // Message Header
+            result.fields.messageReference = elements[1];
+            result.fields.messageType = elements[2];
+            break;
+          case 'BGM': // Beginning of Message
+            result.fields.documentNumber = elements[2];
+            break;
+          case 'DTM': // Date/Time
+            result.fields.processingDate = elements[1];
+            break;
+          case 'MOA': // Monetary Amount
+            result.fields.amount = elements[1];
+            result.fields.currency = elements[2];
+            break;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Parse MTS (Message Transfer System) format
+   * @param {string} mtsData - MTS message
+   * @returns {Object} Parsed MTS message
+   */
+  async parseMTS(mtsData) {
+    // MTS format is typically tag-value pairs
+    const lines = mtsData.trim().split('\n');
+    const result = {
+      messageType: 'MTS',
+      standard: 'MTS',
+      fields: {},
+      bankingSystem: 'MTS',
+      useCase: 'mts_transfer'
+    };
+
+    for (const line of lines) {
+      const match = line.match(/^(\w+)=(.+)$/);
+      if (match) {
+        const [, tag, value] = match;
+        result.fields[tag.toLowerCase()] = value.trim();
+      }
+    }
+
+    // Map common fields
+    result.fields.transactionId = result.fields.txnid || result.fields.id;
+    result.fields.amount = result.fields.amt || result.fields.amount;
+    result.fields.currency = result.fields.ccy || result.fields.currency;
+    result.fields.senderAccount = result.fields.from_acct || result.fields.sender;
+    result.fields.receiverAccount = result.fields.to_acct || result.fields.receiver;
+
+    return result;
   }
 
   /**
@@ -886,7 +1246,10 @@ class EnhancedSWIFTParser {
       'MT103': ['transaction_reference', 'value_date_currency_amount'],
       'MT202': ['transaction_reference', 'value_date_currency_amount'],
       'MT515': ['reference', 'security_identification'],
-      'MT700': ['documentary_credit_number', 'currency_amount']
+      'MT700': ['documentary_credit_number', 'currency_amount'],
+      'MT798': ['reference', 'proprietary_message'],
+      'MT950': ['transaction_reference', 'account_identification'],
+      'MT101': ['transaction_reference', 'value_date_currency_amount']
     };
 
     const required = requiredFields[messageType] || [];
@@ -903,6 +1266,9 @@ class EnhancedSWIFTParser {
       case 'MT202': return 'financial_institution_transfer';
       case 'MT515': return 'tokenized_assets';
       case 'MT700': return 'trade_finance';
+      case 'MT798': return 'proprietary_message';
+      case 'MT950': return 'statement_message';
+      case 'MT101': return 'request_for_transfer';
       default: return 'unknown';
     }
   }
@@ -1307,6 +1673,125 @@ class EnhancedSWIFTParser {
     if (temenosData.transactionType === 'TRADE') return 'trade_finance';
     if (temenosData.transactionType === 'CBDC') return 'cbdc';
     return 'cross_border_payment';
+  }
+
+  classifyTemenosXMLUseCase(temenosData) {
+    const productCode = this.extractXMLValue(temenosData, 'Transaction.ProductCode');
+    if (productCode === 'SEC') return 'tokenized_assets';
+    if (productCode === 'TRD') return 'trade_finance';
+    if (productCode === 'CBDC') return 'cbdc';
+    return 'cross_border_payment';
+  }
+
+  classifyBANCSUseCase(bancsData) {
+    if (bancsData.transactionType === 'BATCH') return 'batch_processing';
+    if (bancsData.transactionType === 'REAL_TIME') return 'real_time_payment';
+    return 'cross_border_payment';
+  }
+
+  classifyFISUseCase(fisData) {
+    if (fisData.systemCode === 'BATCH') return 'batch_processing';
+    if (fisData.systemCode === 'WIRE') return 'wire_transfer';
+    return 'cross_border_payment';
+  }
+
+  parseBANCSHeader(headerLine) {
+    const fields = headerLine.split('|');
+    return {
+      recordType: fields[0],
+      fileDate: fields[1],
+      fileTime: fields[2],
+      fileSequence: fields[3],
+      institutionId: fields[4]
+    };
+  }
+
+  parseBANCSRecord(recordLine) {
+    const fields = recordLine.split('|');
+    return {
+      transactionId: fields[0],
+      amount: fields[1],
+      currency: fields[2],
+      senderAccount: fields[3],
+      receiverAccount: fields[4],
+      senderName: fields[5],
+      receiverName: fields[6],
+      purpose: fields[7],
+      valueDate: fields[8]
+    };
+  }
+
+  parseNACHAFileHeader(line) {
+    return {
+      recordType: line.substring(0, 1),
+      priorityCode: line.substring(1, 3),
+      immediateDestination: line.substring(3, 13),
+      immediateOrigin: line.substring(13, 23),
+      fileCreationDate: line.substring(23, 29),
+      fileCreationTime: line.substring(29, 33),
+      fileSequenceNumber: line.substring(33, 34),
+      recordSize: line.substring(34, 37),
+      blockingFactor: line.substring(37, 39),
+      formatCode: line.substring(39, 40)
+    };
+  }
+
+  parseNACHABatchHeader(line) {
+    return {
+      recordType: line.substring(0, 1),
+      serviceClassCode: line.substring(1, 4),
+      companyName: line.substring(4, 20),
+      companyIdentification: line.substring(20, 30),
+      standardEntryClassCode: line.substring(30, 33),
+      entryDescription: line.substring(33, 43),
+      companyDescriptiveDate: line.substring(43, 49),
+      effectiveEntryDate: line.substring(49, 55),
+      originatorStatusCode: line.substring(55, 56),
+      originatingDFI: line.substring(56, 64),
+      batchNumber: line.substring(64, 71)
+    };
+  }
+
+  parseNACHAEntryDetail(line) {
+    return {
+      recordType: line.substring(0, 1),
+      transactionCode: line.substring(1, 3),
+      receivingDFI: line.substring(3, 11),
+      checkDigit: line.substring(11, 12),
+      DFIAccountNumber: line.substring(12, 29),
+      amount: line.substring(29, 39),
+      individualIdNumber: line.substring(39, 54),
+      individualName: line.substring(54, 76),
+      discretionaryData: line.substring(76, 78),
+      addendaRecordIndicator: line.substring(78, 79),
+      traceNumber: line.substring(79, 94)
+    };
+  }
+
+  parseNACHABatchControl(line) {
+    return {
+      recordType: line.substring(0, 1),
+      serviceClassCode: line.substring(1, 4),
+      entryCount: line.substring(4, 10),
+      entryHash: line.substring(10, 20),
+      totalDebitAmount: line.substring(20, 32),
+      totalCreditAmount: line.substring(32, 44),
+      companyIdentification: line.substring(44, 54),
+      originatingDFI: line.substring(54, 62),
+      batchNumber: line.substring(62, 69)
+    };
+  }
+
+  parseNACHAFileControl(line) {
+    return {
+      recordType: line.substring(0, 1),
+      batchCount: line.substring(1, 7),
+      blockCount: line.substring(7, 13),
+      entryCount: line.substring(13, 21),
+      entryHash: line.substring(21, 31),
+      totalDebitAmount: line.substring(31, 43),
+      totalCreditAmount: line.substring(43, 55)
+    };
   }
 
   encodeEthereumData(parsedMessage) {
