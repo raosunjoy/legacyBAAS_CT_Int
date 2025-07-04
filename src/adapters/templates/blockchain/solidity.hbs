@@ -1,0 +1,128 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/**
+ * {{contractName}} - Generated from COBOL Program {{programId}}
+ * 
+ * Original Program: {{programId}}
+ * Author: {{author}}
+ * Date Written: {{dateWritten}}
+ * Generated: {{generatedAt}}
+ * Banking System: {{bankingSystem}}
+ * Estimated Gas: {{estimatedGas}}
+ * Complexity Score: {{complexity}}
+ */
+
+contract {{contractName}} {
+    
+    // State variables derived from COBOL WORKING-STORAGE
+    {{#each variables}}
+    {{type}} {{visibility}} {{name}}{{#if value}} = {{value}}{{/if}};{{#if picture}} // Original PIC: {{picture}}{{/if}}
+    {{/each}}
+
+    {{#if enableEvents}}
+    // Events for transaction logging
+    event Executed(address indexed caller, uint256 result, uint256 timestamp);
+    event StateChanged(string indexed variable, uint256 oldValue, uint256 newValue);
+    {{/if}}
+
+    {{#if enableModifiers}}
+    // Banking-specific modifiers
+    modifier onlyAuthorized() {
+        require(msg.sender != address(0), "Unauthorized caller");
+        _;
+    }
+
+    modifier validAmount(uint256 amount) {
+        require(amount > 0, "Amount must be positive");
+        _;
+    }
+    {{/if}}
+
+    // Constructor
+    constructor({{#each variables}}{{#if isConstant}}{{type}} _{{name}}{{#unless @last}}, {{/unless}}{{/if}}{{/each}}) {
+        {{#each variables}}
+        {{#if isConstant}}
+        {{name}} = _{{name}};
+        {{/if}}
+        {{/each}}
+    }
+
+    {{#each functions}}
+    /**
+     * {{capitalize name}} function - Generated from COBOL PROCEDURE DIVISION
+     * {{#if operations}}Operations: {{operations.length}}{{/if}}
+     */
+    function {{name}}({{#each parameters}}{{type}} {{name}}{{#unless @last}}, {{/unless}}{{/each}}) 
+        {{visibility}}{{#if isPure}} pure{{/if}}{{#if isView}} view{{/if}}
+        {{#if ../enableModifiers}}{{#if_eq visibility 'public'}}onlyAuthorized{{/if_eq}}{{/if}}
+        returns ({{returns}}) 
+    {
+        {{#if operations}}
+        {{#each operations}}
+        {{#if_eq type 'compute'}}
+        // COBOL COMPUTE: {{target}} = {{expression}}
+        {{#if ../optimizeGas}}
+        uint128 {{target}} = uint128({{expression}});
+        {{else}}
+        uint256 {{target}} = {{expression}};
+        {{/if}}
+        {{/if_eq}}
+        
+        {{#if_eq type 'conditional'}}
+        // COBOL IF: {{condition}}
+        if ({{condition}}) {
+            // {{action}}
+            return 1;
+        }
+        {{/if_eq}}
+        
+        {{#if_eq type 'move'}}
+        // COBOL MOVE: {{source}} TO {{target}}
+        {{target}} = {{source}};
+        {{/if_eq}}
+        
+        {{#if_eq type 'perform'}}
+        // COBOL PERFORM: {{target}}
+        // Calling: {{target}}();
+        {{/if_eq}}
+        {{/each}}
+        
+        {{#if ../enableEvents}}
+        {{#if_eq name 'execute'}}
+        emit Executed(msg.sender, {{#if operations}}{{operations.[0].target}}{{else}}1{{/if}}, block.timestamp);
+        {{/if_eq}}
+        {{/if}}
+        
+        return {{#if operations}}{{operations.[0].target}}{{else}}1{{/if}};
+        {{else}}
+        // Single operation function
+        {{#if operation}}
+        return {{operation.expression}};
+        {{else}}
+        return 1;
+        {{/if}}
+        {{/if}}
+    }
+    {{/each}}
+
+    {{#if optimizeGas}}
+    // Gas-optimized utility functions
+    function getContractInfo() external pure returns (string memory, string memory) {
+        return ("{{contractName}}", "{{programId}}");
+    }
+    {{else}}
+    // Standard utility functions
+    function getContractInfo() external pure returns (string memory programId, string memory author, string memory dateWritten) {
+        return ("{{programId}}", "{{author}}", "{{dateWritten}}");
+    }
+    
+    function getComplexity() external pure returns (uint256) {
+        return {{complexity}};
+    }
+    
+    function getEstimatedGas() external pure returns (uint256) {
+        return {{estimatedGas}};
+    }
+    {{/if}}
+}

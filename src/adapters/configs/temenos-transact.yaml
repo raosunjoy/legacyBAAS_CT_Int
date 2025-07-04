@@ -1,0 +1,340 @@
+# Temenos Transact (T24) Configuration
+# Core Banking System: Temenos T24/Transact
+# Target: European banks, international institutions, SEPA compliance
+
+name: "Temenos Transact"
+core_type: "TEMENOS_TRANSACT"
+version: "R24.6"
+
+# System characteristics
+system:
+  architecture: "component_based"
+  platform: "Unix/Linux/Windows"
+  transaction_manager: "T24_Engine"
+  character_set: "UTF-8"
+  endianness: "little"
+  record_length: "variable"
+  api_type: "REST/SOAP/T24_API"
+
+# COBOL-specific configurations
+cobol:
+  compiler: "Temenos_COBOL"
+  copybook_support: true
+  redefines_support: true
+  occurs_support: true
+  
+  # European banking optimized data types
+  data_types:
+    "PIC X": "String"
+    "PIC 9": "BigDecimal"
+    "PIC S9": "BigDecimal"
+    "COMP": "BigDecimal"
+    "COMP-3": "BigDecimal"  # High precision for European banking
+    "BINARY": "ByteArray"
+    "DISPLAY": "String"
+    "PACKED-DECIMAL": "BigDecimal"
+
+# Blockchain preferences (European focus)
+blockchain:
+  preferred_networks:
+    - "corda"        # Privacy and European compliance
+    - "ethereum"     # DeFi and European digital finance
+    - "xrp"          # SEPA Instant compatible
+    - "algorand"     # Digital Euro ready
+  
+  optimization:
+    gas_optimization: true
+    sepa_compliance: true
+    swift_gpi_integration: true
+    gdpr_compliance: true
+
+# Temenos T24 APIs
+banking_apis:
+  - name: "T24_Account_Service"
+    endpoint: "/T24/account"
+    method: "REST"
+    authentication: "oauth2"
+    
+  - name: "T24_Payment_Service"
+    endpoint: "/T24/payment"
+    method: "REST"
+    authentication: "oauth2"
+  
+  - name: "T24_Customer_Service"
+    endpoint: "/T24/customer"
+    method: "REST"
+    authentication: "oauth2"
+  
+  - name: "T24_SEPA_Service"
+    endpoint: "/T24/sepa"
+    method: "REST"
+    authentication: "oauth2"
+  
+  - name: "T24_SWIFT_Service"
+    endpoint: "/T24/swift"
+    method: "SOAP"
+    authentication: "ws_security"
+
+# European banking modules
+banking_modules:
+  retail_banking: true
+  corporate_banking: true
+  private_banking: true
+  investment_banking: true
+  islamic_banking: true
+  central_banking: true
+  payments_hub: true
+  channels_hub: true
+
+# File handling (T24 specific)
+file_handling:
+  PHYSICAL_FILE: "t24_file"
+  LOGICAL_FILE: "t24_application"
+  SORT_FILE: "t24_enquiry"
+  INDEXED_FILE: "t24_database"
+
+# European schedulers
+schedulers:
+  BATCH: "t24_batch_job"
+  REAL_TIME: "t24_online"
+  SCHEDULED: "t24_agent"
+  COB: "close_of_business"
+  SOD: "start_of_day"
+
+# European authentication
+authentication:
+  type: "strong_authentication"
+  oauth2: true
+  saml2: true
+  psd2_sca: true
+  eidas_compliant: true
+  
+  # European specific
+  sepa_authentication: true
+  swift_3d_secure: true
+  open_banking_auth: true
+
+# European compliance framework
+compliance:
+  # European regulations
+  gdpr: true
+  psd2: true
+  psd2_sca: true
+  mifid_ii: true
+  emir: true
+  solvency_ii: true
+  fatf_guidelines: true
+  
+  # SEPA compliance
+  sepa_credit_transfer: true
+  sepa_direct_debit: true
+  sepa_instant_payments: true
+  
+  # AML/KYC European
+  4th_aml_directive: true
+  5th_aml_directive: true
+  6th_aml_directive: true
+  
+  # Additional European
+  basel_iii: true
+  crd_iv: true
+  brrd: true
+  dga: true
+
+# Performance settings (European scale)
+performance:
+  optimize_gas: true
+  sepa_instant_ready: true
+  real_time_processing: true
+  batch_size: 1000
+  
+  # T24 performance
+  multi_threading: true
+  load_balancing: true
+  caching_enabled: true
+  database_optimization: true
+
+# European monitoring
+monitoring:
+  enable_metrics: true
+  trace_level: "INFO"
+  audit_trail: true
+  
+  # Regulatory monitoring
+  psd2_monitoring: true
+  sepa_monitoring: true
+  swift_gpi_tracking: true
+  fraud_monitoring: true
+
+# Error handling (European banking)
+error_handling:
+  iso_error_codes: true
+  sepa_error_codes: true
+  swift_error_codes: true
+  t24_error_codes: true
+  
+  # European error mappings
+  error_mappings:
+    "T24_001": "ACCOUNT_NOT_FOUND"
+    "T24_002": "INSUFFICIENT_FUNDS"
+    "T24_003": "SEPA_VALIDATION_ERROR"
+    "T24_004": "PSD2_SCA_REQUIRED"
+    "T24_005": "GDPR_CONSENT_REQUIRED"
+
+# European security
+security:
+  encryption_at_rest: "AES-256"
+  encryption_in_transit: "TLS-1.3"
+  key_management: "HSM_FIPS_140-2"
+  
+  # European security standards
+  eidas_qualified_certificates: true
+  common_criteria_certified: true
+  iso27001_compliant: true
+  pci_dss_compliant: true
+
+# Integration patterns (European focus)
+integration:
+  message_queue: "IBM_MQ"
+  api_gateway: "T24_Gateway"
+  service_mesh: "T24_Service_Framework"
+  
+  # European integration
+  sepa_network: true
+  swift_network: true
+  target2_securities: true
+  target2: true
+  tips: true
+
+# Multi-currency (European focus)
+currency:
+  base_currency: "EUR"
+  multi_currency: true
+  real_time_fx: true
+  ecb_rates: true
+  
+  # Supported European currencies
+  supported_currencies:
+    - "EUR"
+    - "GBP"
+    - "CHF"
+    - "SEK"
+    - "NOK"
+    - "DKK"
+    - "PLN"
+    - "CZK"
+    - "HUF"
+
+# SEPA specific configurations
+sepa:
+  sepa_credit_transfer: true
+  sepa_direct_debit: true
+  sepa_instant_payments: true
+  
+  # SEPA technical specifications
+  pain_001: true  # Customer Credit Transfer Initiation
+  pain_008: true  # Customer Direct Debit Initiation
+  pacs_008: true  # Financial Institution Credit Transfer
+  pacs_003: true  # Financial Institution Direct Debit
+  camt_053: true  # Bank to Customer Statement
+  camt_052: true  # Bank to Customer Account Report
+
+# SWIFT integration
+swift:
+  swift_mt_messages: true
+  swift_mx_messages: true
+  swift_gpi: true
+  swift_kyc_registry: true
+  
+  # SWIFT message types
+  mt103: true  # Single Customer Credit Transfer
+  mt202: true  # General Financial Institution Transfer
+  mx_pain_001: true  # Customer Credit Transfer Initiation
+  mx_pacs_008: true  # Financial Institution Credit Transfer
+
+# Use case templates (European banking)
+use_cases:
+  sepa_instant_payment:
+    template: "temenos_sepa_instant.cbl"
+    blockchain: "algorand"
+    compliance: ["psd2", "sepa_instant"]
+  
+  cross_border_payment:
+    template: "temenos_cross_border.cbl"
+    blockchain: "xrp"
+    compliance: ["swift_gpi", "fatf_guidelines"]
+  
+  trade_finance_eu:
+    template: "temenos_trade_finance.cbl"
+    blockchain: "corda"
+    compliance: ["ucp_600", "eu_trade_regulations"]
+  
+  digital_euro:
+    template: "temenos_digital_euro.cbl"
+    blockchain: "algorand"
+    compliance: ["ecb_digital_euro", "gdpr"]
+  
+  open_banking:
+    template: "temenos_open_banking.cbl"
+    blockchain: "ethereum"
+    compliance: ["psd2", "psd2_sca"]
+
+# Development and testing (European standards)
+development:
+  test_environment: "T24_ModelBank"
+  debugging: "T24_Debugger"
+  profiling: "T24_Performance_Monitor"
+  
+  # European testing standards
+  unit_testing: "T24_TAP_Testing"
+  integration_testing: "T24_BrowserWeb"
+  load_testing: "T24_Performance_Testing"
+  compliance_testing: "European_Regulatory_Testing"
+
+# Regulatory reporting (European)
+regulatory_reporting:
+  # ECB reporting
+  anacredi: true
+  corep: true
+  finrep: true
+  
+  # EBA reporting
+  eba_its: true
+  
+  # National reporting
+  bundesbank: true
+  banque_de_france: true
+  bank_of_england: true
+  
+  # Real-time reporting
+  real_time_gross_settlement: true
+  instant_payment_reporting: true
+
+# Innovation and digital banking
+digital_banking:
+  mobile_banking: true
+  internet_banking: true
+  chatbot_integration: true
+  ai_powered_services: true
+  
+  # European digital initiatives
+  psd2_apis: true
+  open_banking_apis: true
+  embedded_finance: true
+  baas_platform: true
+
+# Cloud and deployment (European)
+deployment:
+  cloud_ready: true
+  multi_region_eu: true
+  data_residency_eu: true
+  
+  # European cloud providers
+  aws_eu_regions: true
+  azure_eu_regions: true
+  google_cloud_eu: true
+  
+  # Deployment patterns
+  microservices: true
+  containerized: true
+  kubernetes_ready: true

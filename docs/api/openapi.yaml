@@ -50,6 +50,8 @@ tags:
     description: Webhook management and notifications
   - name: Admin
     description: Administrative operations
+  - name: COBOL
+    description: COBOL transpiler and modernization services
 
 security:
   - OAuth2: []
@@ -350,6 +352,211 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PlatformMetrics'
+
+  /cobol/transpile:
+    post:
+      tags:
+        - COBOL
+      summary: Transpile COBOL to smart contract
+      description: |
+        Convert COBOL programs to blockchain smart contracts with intelligent routing.
+        Supports multiple banking systems (FIS, Fiserv, Temenos, TCS) and blockchain networks (Ethereum, Corda, Algorand).
+      operationId: transpileCobol
+      requestBody:
+        description: COBOL transpilation request
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CobolTranspileRequest'
+            examples:
+              mortgage_calculation:
+                summary: Mortgage calculation COBOL
+                value:
+                  cobolCode: |
+                    IDENTIFICATION DIVISION.
+                    PROGRAM-ID. MORTGAGE-CALC.
+                    AUTHOR. BANK-DEVELOPER.
+                    
+                    DATA DIVISION.
+                    WORKING-STORAGE SECTION.
+                    01 PRINCIPAL PIC 9(10)V99 COMP-3.
+                    01 INTEREST-RATE PIC 9(3)V99 COMP-3.
+                    01 TERM PIC 9(3) COMP.
+                    01 MONTHLY-PAYMENT PIC 9(10)V99 COMP-3.
+                    
+                    PROCEDURE DIVISION.
+                    MAIN-PARAGRAPH.
+                        MOVE 250000.00 TO PRINCIPAL.
+                        MOVE 4.25 TO INTEREST-RATE.
+                        MOVE 360 TO TERM.
+                        COMPUTE MONTHLY-PAYMENT = 
+                            (PRINCIPAL * INTEREST-RATE / 1200) / 
+                            (1 - (1 + INTEREST-RATE / 1200) ** (-TERM)).
+                        STOP RUN.
+                  bankingSystem: FIS_SYSTEMATICS
+                  targetBlockchain: ethereum
+                  optimizeGas: true
+                  enableEvents: true
+      responses:
+        '200':
+          description: COBOL successfully transpiled to smart contract
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobolTranspileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/TranspilationError'
+
+  /cobol/parse:
+    post:
+      tags:
+        - COBOL
+      summary: Parse COBOL to AST
+      description: Parse COBOL source code into Abstract Syntax Tree without generating smart contracts
+      operationId: parseCobol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CobolParseRequest'
+      responses:
+        '200':
+          description: COBOL successfully parsed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobolParseResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/TranspilationError'
+
+  /cobol/validate:
+    post:
+      tags:
+        - COBOL
+      summary: Validate COBOL syntax
+      description: Validate COBOL code syntax without parsing to AST
+      operationId: validateCobol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CobolValidateRequest'
+      responses:
+        '200':
+          description: COBOL validation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobolValidateResponse'
+        '422':
+          description: COBOL validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobolValidateResponse'
+
+  /cobol/templates:
+    get:
+      tags:
+        - COBOL
+      summary: Get available templates
+      description: Retrieve available smart contract templates and banking system configurations
+      operationId: getCobolTemplates
+      parameters:
+        - name: blockchain
+          in: query
+          description: Filter templates by blockchain platform
+          schema:
+            type: string
+            enum: [ethereum, corda, algorand]
+        - name: bankingSystem
+          in: query
+          description: Filter templates by banking system
+          schema:
+            type: string
+            enum: [FIS_SYSTEMATICS, FISERV_DNA, TEMENOS_TRANSACT, TCS_BANCS]
+      responses:
+        '200':
+          description: Available templates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobolTemplatesResponse'
+
+  /cobol/systems:
+    get:
+      tags:
+        - COBOL
+      summary: Get supported banking systems
+      description: List all supported core banking systems with their configurations
+      operationId: getBankingSystems
+      responses:
+        '200':
+          description: Supported banking systems
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BankingSystemsResponse'
+
+  /cobol/metrics:
+    get:
+      tags:
+        - COBOL
+      summary: Get transpiler metrics
+      description: Retrieve COBOL transpiler performance metrics and statistics
+      operationId: getCobolMetrics
+      security:
+        - OAuth2: [admin]
+      responses:
+        '200':
+          description: Transpiler metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobolMetricsResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /cobol/health:
+    get:
+      tags:
+        - COBOL
+      summary: COBOL transpiler health check
+      description: Check health status of COBOL transpiler service
+      operationId: getCobolHealth
+      security: []
+      responses:
+        '200':
+          description: Transpiler is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobolHealthResponse'
+        '503':
+          description: Transpiler is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CobolHealthResponse'
 
 components:
   securitySchemes:
@@ -903,6 +1110,475 @@ components:
             activeConnections:
               type: integer
 
+    CobolTranspileRequest:
+      type: object
+      required:
+        - cobolCode
+      properties:
+        cobolCode:
+          type: string
+          maxLength: 100000
+          description: COBOL source code to transpile
+          example: |
+            IDENTIFICATION DIVISION.
+            PROGRAM-ID. PAYMENT-CALC.
+            
+            DATA DIVISION.
+            WORKING-STORAGE SECTION.
+            01 AMOUNT PIC 9(8)V99 COMP-3.
+            01 FEE PIC 9(4)V99 COMP-3.
+            
+            PROCEDURE DIVISION.
+            MOVE 1000.00 TO AMOUNT.
+            COMPUTE FEE = AMOUNT * 0.025.
+        bankingSystem:
+          type: string
+          enum: [FIS_SYSTEMATICS, FISERV_DNA, TEMENOS_TRANSACT, TCS_BANCS]
+          description: Target banking system
+          default: FIS_SYSTEMATICS
+        targetBlockchain:
+          type: string
+          enum: [ethereum, corda, algorand]
+          description: Target blockchain platform
+          default: ethereum
+        optimizeGas:
+          type: boolean
+          description: Enable gas optimization for smart contracts
+          default: true
+        enableValidation:
+          type: boolean
+          description: Enable COBOL syntax validation
+          default: true
+        enableEvents:
+          type: boolean
+          description: Include events in generated smart contracts
+          default: true
+        enableModifiers:
+          type: boolean
+          description: Include modifiers in generated smart contracts
+          default: true
+        complianceChecks:
+          type: boolean
+          description: Perform compliance validation on COBOL code
+          default: true
+
+    CobolTranspileResponse:
+      type: object
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Unique request identifier
+        success:
+          type: boolean
+          description: Whether transpilation was successful
+        transpilation:
+          type: object
+          properties:
+            ast:
+              $ref: '#/components/schemas/CobolAST'
+            smartContract:
+              $ref: '#/components/schemas/SmartContract'
+            configuration:
+              $ref: '#/components/schemas/TranspilationConfiguration'
+            routing:
+              $ref: '#/components/schemas/RoutingDecision'
+        metadata:
+          type: object
+          properties:
+            transpilationTime:
+              type: integer
+              description: Total transpilation time in milliseconds
+            generationTime:
+              type: integer
+              description: Smart contract generation time in milliseconds
+            cacheExpiry:
+              type: string
+              format: date-time
+              description: When cached result expires
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            status:
+              type: string
+              format: uri
+            download:
+              type: string
+              format: uri
+            deploy:
+              type: string
+              format: uri
+        quota:
+          $ref: '#/components/schemas/QuotaInfo'
+        timestamp:
+          type: string
+          format: date-time
+
+    CobolParseRequest:
+      type: object
+      required:
+        - cobolCode
+      properties:
+        cobolCode:
+          type: string
+          maxLength: 100000
+          description: COBOL source code to parse
+        bankingSystem:
+          type: string
+          enum: [FIS_SYSTEMATICS, FISERV_DNA, TEMENOS_TRANSACT, TCS_BANCS]
+          default: FIS_SYSTEMATICS
+        enableValidation:
+          type: boolean
+          default: true
+
+    CobolParseResponse:
+      type: object
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        success:
+          type: boolean
+        parsing:
+          type: object
+          properties:
+            ast:
+              $ref: '#/components/schemas/CobolAST'
+            statistics:
+              type: object
+              properties:
+                variableCount:
+                  type: integer
+                operationCount:
+                  type: integer
+                complexity:
+                  type: integer
+                parseTime:
+                  type: integer
+                  description: Parse time in milliseconds
+        timestamp:
+          type: string
+          format: date-time
+
+    CobolValidateRequest:
+      type: object
+      required:
+        - cobolCode
+      properties:
+        cobolCode:
+          type: string
+          maxLength: 100000
+        bankingSystem:
+          type: string
+          enum: [FIS_SYSTEMATICS, FISERV_DNA, TEMENOS_TRANSACT, TCS_BANCS]
+          default: FIS_SYSTEMATICS
+
+    CobolValidateResponse:
+      type: object
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        success:
+          type: boolean
+        validation:
+          type: object
+          properties:
+            valid:
+              type: boolean
+            programId:
+              type: string
+            warnings:
+              type: array
+              items:
+                type: string
+            error:
+              type: string
+              description: Validation error message (if invalid)
+            statistics:
+              type: object
+              properties:
+                variableCount:
+                  type: integer
+                operationCount:
+                  type: integer
+                complexity:
+                  type: integer
+        validationTime:
+          type: integer
+          description: Validation time in milliseconds
+        timestamp:
+          type: string
+          format: date-time
+
+    CobolTemplatesResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        templates:
+          type: object
+          properties:
+            blockchain:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  language:
+                    type: string
+                  features:
+                    type: array
+                    items:
+                      type: string
+                  gasOptimization:
+                    type: boolean
+                  complianceSupport:
+                    type: boolean
+            bankingSystems:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  preferredBlockchains:
+                    type: array
+                    items:
+                      type: string
+                  complianceRequirements:
+                    type: object
+        timestamp:
+          type: string
+          format: date-time
+
+    BankingSystemsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        systems:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              version:
+                type: string
+              architecture:
+                type: string
+              platform:
+                type: string
+              preferredBlockchains:
+                type: array
+                items:
+                  type: string
+              supportedDataTypes:
+                type: array
+                items:
+                  type: string
+              complianceRequirements:
+                type: object
+              features:
+                type: array
+                items:
+                  type: string
+        totalCount:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+    CobolMetricsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        metrics:
+          type: object
+          properties:
+            transpiler:
+              type: object
+              properties:
+                totalTranspilations:
+                  type: integer
+                successfulTranspilations:
+                  type: integer
+                failedTranspilations:
+                  type: integer
+                successRate:
+                  type: number
+                  format: double
+                averageTranspilationTime:
+                  type: number
+                  format: double
+            authentication:
+              type: object
+              properties:
+                totalAttempts:
+                  type: integer
+                failures:
+                  type: integer
+                successRate:
+                  type: number
+                  format: double
+            configuration:
+              type: object
+              properties:
+                supportedSystems:
+                  type: integer
+                availableBlockchains:
+                  type: array
+                  items:
+                    type: string
+            platform:
+              type: object
+              properties:
+                uptime:
+                  type: number
+                memory:
+                  type: object
+                version:
+                  type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    CobolHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        components:
+          type: object
+          properties:
+            transpiler:
+              type: string
+              enum: [operational, degraded, failed]
+            configManager:
+              type: string
+              enum: [operational, initializing, failed]
+            authManager:
+              type: string
+              enum: [operational, failed]
+            templates:
+              type: string
+              enum: [operational, failed]
+        capabilities:
+          type: object
+          properties:
+            parsing:
+              type: boolean
+            transpilation:
+              type: boolean
+            validation:
+              type: boolean
+            multiBlockchain:
+              type: boolean
+            multiBankingSystem:
+              type: boolean
+        error:
+          type: string
+          description: Error message if unhealthy
+        timestamp:
+          type: string
+          format: date-time
+
+    CobolAST:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        programId:
+          type: string
+        author:
+          type: string
+        dateWritten:
+          type: string
+        variableCount:
+          type: integer
+        operationCount:
+          type: integer
+        complexity:
+          type: integer
+        estimatedGas:
+          type: integer
+        metadata:
+          type: object
+
+    SmartContract:
+      type: object
+      properties:
+        blockchain:
+          type: string
+          enum: [ethereum, corda, algorand]
+        language:
+          type: string
+          enum: [solidity, kotlin, teal]
+        contractCode:
+          type: string
+          description: Generated smart contract source code
+        optimized:
+          type: boolean
+        features:
+          type: array
+          items:
+            type: string
+        gasEstimate:
+          type: integer
+
+    TranspilationConfiguration:
+      type: object
+      properties:
+        bankingSystem:
+          type: string
+        targetBlockchain:
+          type: string
+        optimizeGas:
+          type: boolean
+        enableValidation:
+          type: boolean
+
+    RoutingDecision:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Reason for routing decision
+        alternatives:
+          type: array
+          items:
+            type: object
+            properties:
+              blockchain:
+                type: string
+              reason:
+                type: string
+
+    QuotaInfo:
+      type: object
+      properties:
+        limit:
+          type: integer
+          description: Monthly transpilation limit
+        used:
+          type: integer
+          description: Transpilations used this month
+        remaining:
+          type: integer
+          description: Remaining transpilations this month
+
   responses:
     BadRequest:
       description: Bad request
@@ -978,3 +1654,72 @@ components:
               retryAfter:
                 type: integer
                 description: Seconds to wait before retry
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: forbidden
+              message:
+                type: string
+                example: Insufficient permissions for this operation
+
+    PayloadTooLarge:
+      description: Payload too large
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: payload_too_large
+              message:
+                type: string
+                example: COBOL code exceeds maximum length
+              actualLength:
+                type: integer
+              maxLength:
+                type: integer
+
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: rate_limit_exceeded
+              message:
+                type: string
+                example: Rate limit exceeded for user role
+              retryAfter:
+                type: integer
+                description: Seconds to wait before retry
+
+    TranspilationError:
+      description: COBOL transpilation error
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: transpilation_error
+              message:
+                type: string
+                example: COBOL parsing failed - invalid syntax
+              requestId:
+                type: string
+                format: uuid
+              timestamp:
+                type: string
+                format: date-time

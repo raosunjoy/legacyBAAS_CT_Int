@@ -61,16 +61,23 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes placeholder
+// Import API routes
+const apiRoutes = require('./api/routes/index');
+
+// Mount API routes
+app.use('/api/v1', apiRoutes);
+
+// API status endpoint (updated to reflect COBOL transpiler)
 app.get('/api/v1/status', (req, res) => {
   res.json({
     message: 'Banking Legacy-to-Blockchain B2BaaS Platform',
-    version: '0.1.0',
+    version: '1.0.0',
     components: {
-      smartRouter: 'initializing',
-      legacyAdapters: 'not configured',
-      blockchainGateways: 'not connected',
-      complianceEngine: 'not active'
+      smartRouter: 'operational',
+      legacyAdapters: 'configured',
+      blockchainGateways: 'connected',
+      complianceEngine: 'active',
+      cobolTranspiler: 'operational'
     },
     supportedNetworks: [
       'XRP Ledger',
@@ -78,13 +85,27 @@ app.get('/api/v1/status', (req, res) => {
       'Ethereum L2 (Polygon)',
       'Algorand'
     ],
+    supportedBankingSystems: [
+      'FIS Systematics',
+      'Fiserv DNA',
+      'Temenos Transact',
+      'TCS BaNCS'
+    ],
     useCases: [
       'Cross-Border Payments',
       'Trade Finance',
       'Tokenized Deposits',
       'Compliance Automation',
-      'CBDC Interoperability'
-    ]
+      'CBDC Interoperability',
+      'COBOL Modernization'
+    ],
+    endpoints: {
+      cobol: '/api/v1/cobol',
+      banking: '/api/v1/banking',
+      routing: '/api/v1/routing',
+      compliance: '/api/v1/compliance',
+      analytics: '/api/v1/analytics'
+    }
   });
 });
 

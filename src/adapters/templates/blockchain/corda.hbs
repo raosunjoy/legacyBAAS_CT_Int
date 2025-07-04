@@ -1,0 +1,167 @@
+/**
+ * {{contractName}} - Generated from COBOL Program {{programId}}
+ * 
+ * Original Program: {{programId}}
+ * Author: {{author}}
+ * Date Written: {{dateWritten}}
+ * Generated: {{generatedAt}}
+ * Banking System: {{bankingSystem}}
+ * Complexity Score: {{complexity}}
+ */
+
+package com.legacybaas.contracts.{{lowercase contractName}}
+
+import net.corda.core.contracts.*
+import net.corda.core.transactions.LedgerTransaction
+import net.corda.core.identity.AbstractParty
+import java.math.BigDecimal
+import java.math.BigInteger
+
+// Contract State derived from COBOL WORKING-STORAGE
+@BelongsToContract({{contractName}}Contract::class)
+data class {{contractName}}State(
+    {{#each variables}}
+    val {{camelCase name}}: {{type}}{{#if value}} = {{value}}{{/if}}, // Original: {{originalName}} PIC {{picture}}
+    {{/each}}
+    override val participants: List<AbstractParty> = listOf()
+) : ContractState {
+
+    {{#each functions}}
+    /**
+     * {{capitalize name}} - Generated from COBOL PROCEDURE DIVISION
+     */
+    fun {{camelCase name}}({{#each parameters}}{{name}}: {{type}}{{#unless @last}}, {{/unless}}{{/each}}): {{returns}} {
+        {{#if operations}}
+        {{#each operations}}
+        {{#if_eq type 'compute'}}
+        // COBOL COMPUTE: {{target}} = {{expression}}
+        val {{camelCase target}} = {{expression}}
+        {{/if_eq}}
+        
+        {{#if_eq type 'conditional'}}
+        // COBOL IF: {{condition}}
+        return if ({{condition}}) {
+            // {{action}}
+            BigInteger.ONE
+        } else {
+            BigInteger.ZERO
+        }
+        {{/if_eq}}
+        
+        {{#if_eq type 'move'}}
+        // COBOL MOVE: {{source}} TO {{target}}
+        val {{camelCase target}} = {{source}}
+        {{/if_eq}}
+        {{/each}}
+        
+        return {{#if operations}}{{camelCase operations.[0].target}}{{else}}BigInteger.ONE{{/if}}
+        {{else}}
+        {{#if operation}}
+        return {{operation.expression}}
+        {{else}}
+        return BigInteger.ONE
+        {{/if}}
+        {{/if}}
+    }
+    {{/each}}
+
+    // Validation function derived from COBOL business rules
+    fun validate() {
+        {{#each variables}}
+        {{#if_eq type 'String'}}
+        require({{camelCase name}}.isNotBlank()) { "{{originalName}} cannot be empty" }
+        {{/if_eq}}
+        {{#if_eq type 'BigInteger'}}
+        require({{camelCase name}} >= BigInteger.ZERO) { "{{originalName}} must be non-negative" }
+        {{/if_eq}}
+        {{/each}}
+    }
+
+    // Banking-specific validation
+    fun validateBankingRules() {
+        {{#if_eq bankingSystem 'FIS_SYSTEMATICS'}}
+        // FIS Systematics specific validations
+        validate()
+        {{/if_eq}}
+        {{#if_eq bankingSystem 'TCS_BANCS'}}
+        // TCS BaNCS specific validations
+        validate()
+        {{/if_eq}}
+    }
+}
+
+// Contract implementation
+class {{contractName}}Contract : Contract {
+    companion object {
+        const val ID = "com.legacybaas.contracts.{{lowercase contractName}}.{{contractName}}Contract"
+    }
+
+    // Commands derived from COBOL operations
+    interface Commands : CommandData {
+        class Execute : Commands
+        class Update : Commands
+        class Validate : Commands
+    }
+
+    override fun verify(tx: LedgerTransaction) {
+        val command = tx.commands.requireSingleCommand<Commands>()
+        
+        when (command.value) {
+            is Commands.Execute -> verifyExecute(tx)
+            is Commands.Update -> verifyUpdate(tx)
+            is Commands.Validate -> verifyValidate(tx)
+        }
+    }
+
+    private fun verifyExecute(tx: LedgerTransaction) {
+        requireThat {
+            "No inputs should be consumed for execution." using tx.inputs.isEmpty()
+            "One output should be created." using (tx.outputs.size == 1)
+            
+            val output = tx.outputsOfType<{{contractName}}State>().single()
+            "Output state must be valid." using {
+                try {
+                    output.validate()
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+            }
+        }
+    }
+
+    private fun verifyUpdate(tx: LedgerTransaction) {
+        requireThat {
+            "One input should be consumed." using (tx.inputs.size == 1)
+            "One output should be created." using (tx.outputs.size == 1)
+            
+            val input = tx.inputsOfType<{{contractName}}State>().single()
+            val output = tx.outputsOfType<{{contractName}}State>().single()
+            
+            "Updated state must be valid." using {
+                try {
+                    output.validate()
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+            }
+        }
+    }
+
+    private fun verifyValidate(tx: LedgerTransaction) {
+        requireThat {
+            "At least one state should be present." using tx.outputs.isNotEmpty()
+            
+            val states = tx.outputsOfType<{{contractName}}State>()
+            "All states must be valid." using states.all { 
+                try {
+                    it.validate()
+                    true
+                } catch (e: Exception) {
+                    false
+                }
+            }
+        }
+    }
+}
