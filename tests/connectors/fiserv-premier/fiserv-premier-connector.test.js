@@ -383,10 +383,10 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
 
   describe('Account Operations', () => {
     beforeEach(() => {
+      connector.authToken = 'REST_TOKEN_001';
+      connector.tokenExpiry = Date.now() + 3600000;
       connector.soapToken = 'SOAP_TOKEN_001';
-      connector.restToken = 'REST_TOKEN_001';
       connector.soapTokenExpiry = Date.now() + 3600000;
-      connector.restTokenExpiry = Date.now() + 3600000;
     });
 
     test('should get account details via SOAP', async () => {
@@ -410,7 +410,7 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         `
       };
 
-      mockHttpClient.mockResolvedValue(soapResponse);
+      mockHttpClient.post.mockResolvedValue(soapResponse);
 
       const result = await connector.getAccountDetails('1234567890');
 
