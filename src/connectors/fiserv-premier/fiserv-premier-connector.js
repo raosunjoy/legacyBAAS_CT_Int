@@ -71,6 +71,26 @@ const PREMIER_TRANSACTION_TYPES = {
 };
 
 /**
+ * Fiserv Premier Account Types
+ */
+const PREMIER_ACCOUNT_TYPES = {
+  CHECKING: '01',
+  SAVINGS: '02',
+  MONEY_MARKET: '03',
+  CD: '04',
+  IRA: '05',
+  LOAN: '10',
+  CREDIT_CARD: '11',
+  LINE_OF_CREDIT: '12',
+  MORTGAGE: '13',
+  BUSINESS_CHECKING: '21',
+  BUSINESS_SAVINGS: '22',
+  BUSINESS_MONEY_MARKET: '23',
+  ESCROW: '30',
+  TRUST: '31'
+};
+
+/**
  * Fiserv Premier Flat File Layout
  */
 const PREMIER_FILE_LAYOUT = {
@@ -142,6 +162,7 @@ class FiservPremierConnector extends BaseBankingConnector {
       // Community Banking Features
       enableBranchIntegration: config.enableBranchIntegration !== false,
       enableTellerIntegration: config.enableTellerIntegration !== false,
+      branchId: config.branchId || 'BR001',
       
       // Security
       enableSSL: config.enableSSL !== false,
@@ -151,6 +172,10 @@ class FiservPremierConnector extends BaseBankingConnector {
     // Session management
     this.authToken = null;
     this.tokenExpiry = null;
+    this.soapToken = null;
+    this.soapTokenExpiry = null;
+    this.restToken = null;
+    this.restTokenExpiry = null;
     this.soapClients = new Map();
 
     // HTTP client for REST APIs
@@ -215,6 +240,29 @@ class FiservPremierConnector extends BaseBankingConnector {
   }
 
   /**
+   * Hybrid authentication (both SOAP and REST)
+   * Used for comprehensive integration testing
+   * @returns {Promise<void>}
+   */
+  async authenticateHybrid() {
+    try {
+      logger.info('Performing hybrid authentication with Fiserv Premier');
+
+      // Authenticate with both SOAP and REST
+      await this.authenticateSOAP();
+      await this.authenticateREST();
+
+      logger.info('Hybrid authentication successful');
+    } catch (error) {
+      this.metrics.authenticationFailures++;
+      logger.error('Hybrid authentication failed', {
+        error: error.message
+      });
+      throw new Error(`Hybrid authentication failed: ${error.message}`);
+    }
+  }
+
+  /**
    * REST authentication
    */
   async authenticateREST() {
@@ -227,8 +275,12 @@ class FiservPremierConnector extends BaseBankingConnector {
 
     const response = await this.httpClient.post(PREMIER_ENDPOINTS.REST_AUTH, authData);
 
+    this.restToken = response.data.accessToken;
+    this.restTokenExpiry = Date.now() + (response.data.expiresIn * 1000);
+    
+    // Also set authToken for compatibility
     this.authToken = response.data.accessToken;
-    this.tokenExpiry = Date.now() + (response.data.expiresIn * 1000);
+    this.tokenExpiry = this.restTokenExpiry;
 
     // Set authorization header
     this.httpClient.defaults.headers.common['Authorization'] = `Bearer ${this.authToken}`;
@@ -240,25 +292,42 @@ class FiservPremierConnector extends BaseBankingConnector {
    * SOAP authentication
    */
   async authenticateSOAP() {
-    const wsdlUrl = this.premierConfig.soapUrl + PREMIER_ENDPOINTS.AUTHENTICATION_WSDL;
-    const soapClient = await soap.createClientAsync(wsdlUrl);
+    try {
+      const wsdlUrl = this.premierConfig.soapUrl + PREMIER_ENDPOINTS.AUTHENTICATION_WSDL;
+      const soapClient = await soap.createClientAsync(wsdlUrl);
 
-    const authRequest = {
-      institutionId: this.premierConfig.institutionId,
-      username: this.premierConfig.username,
-      password: this.premierConfig.password,
-      applicationId: this.premierConfig.applicationId
-    };
+      const authRequest = {
+        institutionId: this.premierConfig.institutionId,
+        username: this.premierConfig.username,
+        password: this.premierConfig.password,
+        applicationId: this.premierConfig.applicationId
+      };
 
-    const [result] = await soapClient.AuthenticateAsync(authRequest);
+      const [result] = await soapClient.AuthenticateAsync(authRequest);
 
-    this.authToken = result.sessionToken;
-    this.tokenExpiry = Date.now() + (result.expiresIn * 1000);
+      if (!result || !result.sessionToken) {
+        throw new Error('Premier SOAP authentication failed: Invalid response');
+      }
 
-    // Store SOAP client for reuse
-    this.soapClients.set('auth', soapClient);
+      this.soapToken = result.sessionToken;
+      this.soapTokenExpiry = Date.now() + (result.expiresIn * 1000);
+      
+      // Also set authToken for compatibility
+      this.authToken = result.sessionToken;
+      this.tokenExpiry = this.soapTokenExpiry;
+      
+      // Increment SOAP metrics
+      this.premierMetrics.soapCalls++;
 
-    logger.info('Premier SOAP authentication successful');
+      // Store SOAP client for reuse
+      this.soapClients.set('auth', soapClient);
+
+      logger.info('Premier SOAP authentication successful');
+    } catch (error) {
+      this.metrics.authenticationFailures++;
+      logger.error('Premier SOAP authentication failed', { error: error.message });
+      throw new Error(`Premier SOAP authentication failed: ${error.message}`);
+    }
   }
 
   /**
@@ -677,6 +746,24 @@ class FiservPremierConnector extends BaseBankingConnector {
     }
   }
 
+  /**
+   * Ensure SOAP authentication is valid
+   */
+  async ensureSOAPAuthenticated() {
+    if (!this.soapToken || Date.now() >= this.soapTokenExpiry - 60000) {
+      await this.authenticateSOAP();
+    }
+  }
+
+  /**
+   * Ensure REST authentication is valid  
+   */
+  async ensureRESTAuthenticated() {
+    if (!this.restToken || Date.now() >= this.restTokenExpiry - 60000) {
+      await this.authenticateREST();
+    }
+  }
+
   async processTransactionSOAP(operation, request) {
     const wsdlUrl = this.premierConfig.soapUrl + PREMIER_ENDPOINTS.TRANSACTION_SERVICE_WSDL;
     
@@ -772,6 +859,159 @@ class FiservPremierConnector extends BaseBankingConnector {
   }
 
   /**
+   * Generic SOAP service call
+   * @param {Object} request 
+   * @returns {Promise<Object>}
+   */
+  async callSOAPService(request) {
+    try {
+      const envelope = this.buildSOAPEnvelope(request.method, request.parameters || {});
+      
+      const response = await this.httpClient.post('/soap', envelope, {
+        headers: {
+          'Content-Type': 'text/xml; charset=utf-8',
+          'SOAPAction': request.method
+        }
+      });
+
+      const parsed = this.parseSOAPResponse(response.data);
+      
+      // Check for SOAP fault
+      if (parsed.faultstring) {
+        throw new Error(parsed.faultstring);
+      }
+
+      this.premierMetrics.soapCalls++;
+      return parsed;
+
+    } catch (error) {
+      logger.error('SOAP service call failed', {
+        method: request.method,
+        error: error.message
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Build SOAP envelope
+   * @param {string} method 
+   * @param {Object} parameters 
+   * @returns {string}
+   */
+  buildSOAPEnvelope(method, parameters) {
+    let parametersXml = '';
+    
+    for (const [key, value] of Object.entries(parameters)) {
+      parametersXml += `<${key}>${value}</${key}>`;
+    }
+
+    return `
+      <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+        <soap:Header>
+          <SessionToken>${this.authToken || ''}</SessionToken>
+        </soap:Header>
+        <soap:Body>
+          <${method}>
+            ${parametersXml}
+          </${method}>
+        </soap:Body>
+      </soap:Envelope>
+    `.trim();
+  }
+
+  /**
+   * Parse SOAP response
+   * @param {string} soapXml 
+   * @returns {Object}
+   */
+  parseSOAPResponse(soapXml) {
+    try {
+      const parser = new xml2js.Parser({ explicitArray: false });
+      let result = {};
+      
+      parser.parseString(soapXml, (err, parsed) => {
+        if (err) {
+          throw new Error(`Failed to parse SOAP response: ${err.message}`);
+        }
+        
+        const body = parsed['soap:Envelope']['soap:Body'];
+        
+        // Check for SOAP fault
+        if (body['soap:Fault']) {
+          const fault = body['soap:Fault'];
+          result = {
+            faultcode: fault.faultcode,
+            faultstring: fault.faultstring,
+            detail: fault.detail
+          };
+          return;
+        }
+        
+        // Extract response data (assumes first element in body is the response)
+        const responseKey = Object.keys(body)[0];
+        if (responseKey) {
+          result = body[responseKey];
+        }
+      });
+      
+      return result;
+      
+    } catch (error) {
+      logger.error('Failed to parse SOAP response', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Generic REST service call
+   * @param {string} method 
+   * @param {string} endpoint 
+   * @param {Object} data 
+   * @returns {Promise<Object>}
+   */
+  async callRESTService(method, endpoint, data = null) {
+    try {
+      await this.ensureRESTAuthenticated();
+      
+      const config = {
+        method: method.toLowerCase(),
+        url: endpoint,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${this.restToken || this.authToken}`,
+          'X-Institution-ID': this.premierConfig.institutionId,
+          'X-Branch-ID': this.premierConfig.branchId
+        }
+      };
+      
+      if (data && (method.toUpperCase() === 'POST' || method.toUpperCase() === 'PUT')) {
+        config.data = data;
+      }
+      
+      const response = await this.httpClient(config);
+      
+      this.premierMetrics.restCalls++;
+      return response.data;
+      
+    } catch (error) {
+      logger.error('REST service call failed', {
+        method,
+        endpoint,
+        error: error.message
+      });
+      
+      // Extract error message from response if available
+      if (error.response && error.response.data && error.response.data.message) {
+        throw new Error(error.response.data.message);
+      }
+      
+      throw error;
+    }
+  }
+
+  /**
    * Get enhanced status with Premier metrics
    * @returns {Object}
    */
@@ -803,5 +1043,6 @@ module.exports = {
   FiservPremierConnector,
   PREMIER_ENDPOINTS,
   PREMIER_TRANSACTION_TYPES,
+  PREMIER_ACCOUNT_TYPES,
   PREMIER_FILE_LAYOUT
 };

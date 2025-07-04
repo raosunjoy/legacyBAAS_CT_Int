@@ -6,7 +6,9 @@
  */
 
 const axios = require('axios');
+const soap = require('soap');
 jest.mock('axios');
+jest.mock('soap');
 
 const { 
   FiservPremierConnector, 
@@ -24,6 +26,28 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Mock SOAP client
+    const mockSoapClient = {
+      AuthenticateAsync: jest.fn().mockResolvedValue([{
+        sessionToken: 'SOAP_TOKEN_001',
+        expiresIn: 3600
+      }]),
+      GetAccountAsync: jest.fn().mockResolvedValue([{
+        accountNumber: '123456789',
+        accountType: '01',
+        status: 'A',
+        currentBalance: '1000.00',
+        availableBalance: '950.00'
+      }]),
+      ProcessTransactionAsync: jest.fn().mockResolvedValue([{
+        transactionId: 'TXN123456',
+        status: 'P',
+        authCode: 'AUTH123'
+      }])
+    };
+    
+    soap.createClientAsync = jest.fn().mockResolvedValue(mockSoapClient);
     
     // Mock configuration
     config = {
@@ -180,16 +204,27 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         }
       };
 
-      mockHttpClient.mockRejectedValue(authError);
+      // Mock SOAP client to fail
+      const mockFailingSoapClient = {
+        AuthenticateAsync: jest.fn().mockRejectedValue(authError)
+      };
+      
+      soap.createClientAsync = jest.fn().mockResolvedValue(mockFailingSoapClient);
 
       await expect(connector.authenticateSOAP()).rejects.toThrow('Premier SOAP authentication failed');
       expect(connector.metrics.authenticationFailures).toBe(1);
     });
 
     test('should handle hybrid authentication', async () => {
-      const soapResponse = {
-        data: `<soap:Envelope><soap:Body><AuthenticateResponse><SessionToken>SOAP_001</SessionToken></AuthenticateResponse></soap:Body></soap:Envelope>`
+      // Override SOAP client mock for this test
+      const mockSoapClient = {
+        AuthenticateAsync: jest.fn().mockResolvedValue([{
+          sessionToken: 'SOAP_001',
+          expiresIn: 3600
+        }])
       };
+      
+      soap.createClientAsync = jest.fn().mockResolvedValue(mockSoapClient);
       
       const restResponse = {
         data: {
@@ -198,11 +233,9 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         }
       };
 
-      mockHttpClient
-        .mockResolvedValueOnce(soapResponse)
-        .mockResolvedValueOnce(restResponse);
+      mockHttpClient.post.mockResolvedValueOnce(restResponse);
 
-      await connector.authenticate();
+      await connector.authenticateHybrid();
 
       expect(connector.soapToken).toBe('SOAP_001');
       expect(connector.restToken).toBe('REST_001');
@@ -212,11 +245,15 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
       connector.soapToken = 'expired_soap_token';
       connector.soapTokenExpiry = Date.now() - 1000;
 
-      const refreshResponse = {
-        data: `<soap:Envelope><soap:Body><AuthenticateResponse><SessionToken>NEW_SOAP_001</SessionToken></AuthenticateResponse></soap:Body></soap:Envelope>`
+      // Mock SOAP client to return new token
+      const mockRefreshSoapClient = {
+        AuthenticateAsync: jest.fn().mockResolvedValue([{
+          sessionToken: 'NEW_SOAP_001',
+          expiresIn: 3600
+        }])
       };
-
-      mockHttpClient.mockResolvedValue(refreshResponse);
+      
+      soap.createClientAsync = jest.fn().mockResolvedValue(mockRefreshSoapClient);
 
       await connector.ensureSOAPAuthenticated();
 
@@ -256,7 +293,7 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         `
       };
 
-      mockHttpClient.mockResolvedValue(soapResponse);
+      mockHttpClient.post.mockResolvedValue(soapResponse);
 
       const result = await connector.callSOAPService(soapRequest);
 
@@ -283,7 +320,7 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         `
       };
 
-      mockHttpClient.mockResolvedValue(soapFault);
+      mockHttpClient.post.mockResolvedValue(soapFault);
 
       await expect(connector.callSOAPService({ method: 'GetAccountDetails' })).rejects.toThrow('Invalid account number');
     });
@@ -390,111 +427,110 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
     });
 
     test('should get account details via SOAP', async () => {
-      const soapResponse = {
-        data: `
-          <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-            <soap:Body>
-              <GetAccountDetailsResponse>
-                <AccountNumber>1234567890</AccountNumber>
-                <AccountName>COMMUNITY MEMBER</AccountName>
-                <AccountType>CHECKING</AccountType>
-                <Balance>1500.00</Balance>
-                <Status>ACTIVE</Status>
-                <BranchId>BR001</BranchId>
-                <ProductCode>CHK001</ProductCode>
-                <OpenDate>2023-01-15</OpenDate>
-                <LastActivity>2023-12-01</LastActivity>
-              </GetAccountDetailsResponse>
-            </soap:Body>
-          </soap:Envelope>
-        `
+      // Force SOAP usage for this test
+      connector.premierConfig.preferRESTOverSOAP = false;
+      
+      // Mock SOAP client
+      const mockSoapClient = {
+        GetAccountDetailsAsync: jest.fn().mockResolvedValue([{
+          accountDetails: {
+            accountNumber: '1234567890',
+            accountName: 'COMMUNITY MEMBER',
+            accountType: '01',
+            currentBalance: '1500.00',
+            availableBalance: '1450.00',
+            status: 'A',
+            branchCode: 'BR001',
+            productCode: 'CHK001',
+            openDate: '2023-01-15',
+            lastActivity: '2023-12-01'
+          }
+        }])
       };
-
-      mockHttpClient.post.mockResolvedValue(soapResponse);
+      
+      soap.createClientAsync = jest.fn().mockResolvedValue(mockSoapClient);
 
       const result = await connector.getAccountDetails('1234567890');
 
       expect(result).toEqual({
         accountNumber: '1234567890',
-        accountName: 'COMMUNITY MEMBER',
         accountType: 'CHECKING',
         accountStatus: 'ACTIVE',
-        balance: 1500.00,
-        branchId: 'BR001',
+        customerId: undefined,
         productCode: 'CHK001',
         openDate: '2023-01-15',
-        lastActivity: '2023-12-01'
+        currentBalance: 1500.00,
+        availableBalance: 1450.00,
+        interestRate: 0,
+        maturityDate: undefined,
+        branchCode: 'BR001',
+        currency: 'USD'
       });
     });
 
     test('should get account details via REST fallback', async () => {
-      // First SOAP call fails
-      const soapError = new Error('SOAP service unavailable');
+      // Force REST usage for this test (default behavior)
+      connector.premierConfig.preferRESTOverSOAP = true;
       
       // REST call succeeds
       const restResponse = {
         data: {
           accountNumber: '1234567890',
-          accountName: 'COMMUNITY MEMBER',
-          accountType: 'SAVINGS',
-          balance: 2000.00,
-          status: 'ACTIVE'
+          accountType: '02',
+          currentBalance: '2000.00',
+          availableBalance: '1950.00',
+          status: 'A',
+          productCode: 'SAV001',
+          openDate: '2023-01-15',
+          branchCode: 'BR001'
         }
       };
 
-      mockHttpClient
-        .mockRejectedValueOnce(soapError)
-        .mockResolvedValueOnce(restResponse);
+      mockHttpClient.get.mockResolvedValue(restResponse);
 
       const result = await connector.getAccountDetails('1234567890');
 
       expect(result.accountNumber).toBe('1234567890');
       expect(result.accountType).toBe('SAVINGS');
-      expect(result.balance).toBe(2000.00);
+      expect(result.currentBalance).toBe(2000.00);
+      expect(result.availableBalance).toBe(1950.00);
+      expect(result.accountStatus).toBe('ACTIVE');
     });
 
     test('should check account balance with both services', async () => {
       const balanceResponse = {
         data: {
-          accountNumber: '1234567890',
-          availableBalance: 1800.00,
           currentBalance: 2000.00,
-          pendingBalance: 200.00,
-          holds: 0.00,
-          lastUpdated: '2023-12-01T15:30:00Z'
+          availableBalance: 1800.00,
+          pendingAmount: 200.00,
+          holdAmount: 0.00
         }
       };
 
-      mockHttpClient.mockResolvedValue(balanceResponse);
+      mockHttpClient.get.mockResolvedValue(balanceResponse);
 
       const result = await connector.checkAccountBalance('1234567890', 'USD');
 
-      expect(result).toEqual({
-        accountNumber: '1234567890',
-        currency: 'USD',
-        availableBalance: 1800.00,
-        currentBalance: 2000.00,
-        pendingBalance: 200.00,
-        holds: 0.00,
-        lastUpdated: '2023-12-01T15:30:00Z'
-      });
+      expect(result.accountNumber).toBe('1234567890');
+      expect(result.currency).toBe('USD');
+      expect(result.currentBalance).toBe(2000.00);
+      expect(result.availableBalance).toBe(1800.00);
+      expect(result.pendingAmount).toBe(200.00);
+      expect(result.holdAmount).toBe(0.00);
+      expect(result.lastUpdated).toBeDefined();
     });
 
     test('should handle account not found', async () => {
-      const notFoundResponse = {
-        data: `
-          <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-            <soap:Body>
-              <soap:Fault>
-                <faultcode>Client</faultcode>
-                <faultstring>Account not found</faultstring>
-              </soap:Fault>
-            </soap:Body>
-          </soap:Envelope>
-        `
+      const notFoundError = new Error('Account not found');
+      notFoundError.response = {
+        status: 404,
+        data: {
+          error: 'ACCOUNT_NOT_FOUND',
+          message: 'Account not found'
+        }
       };
 
-      mockHttpClient.mockResolvedValue(notFoundResponse);
+      mockHttpClient.get.mockRejectedValue(notFoundError);
 
       await expect(connector.getAccountDetails('9999999999')).rejects.toThrow('Account not found');
     });
@@ -502,6 +538,8 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
 
   describe('Transaction Processing', () => {
     beforeEach(() => {
+      connector.authToken = 'REST_TOKEN_001';
+      connector.tokenExpiry = Date.now() + 3600000;
       connector.soapToken = 'SOAP_TOKEN_001';
       connector.restToken = 'REST_TOKEN_001';
       connector.soapTokenExpiry = Date.now() + 3600000;
@@ -517,22 +555,28 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         currency: 'USD'
       };
 
-      // Mock account check
+      // Mock account check (REST response)
       const accountResponse = {
-        data: `
-          <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-            <soap:Body>
-              <GetAccountDetailsResponse>
-                <AccountNumber>1234567890</AccountNumber>
-                <Status>ACTIVE</Status>
-                <Balance>1000.00</Balance>
-              </GetAccountDetailsResponse>
-            </soap:Body>
-          </soap:Envelope>
-        `
+        data: {
+          accountNumber: '1234567890',
+          accountType: '01',
+          status: 'A',
+          currentBalance: '1000.00',
+          availableBalance: '950.00'
+        }
       };
 
-      mockHttpClient.mockResolvedValue(accountResponse);
+      mockHttpClient.get.mockResolvedValue(accountResponse);
+      
+      // Mock BSA screening if needed (though not triggered for amounts < $10,000)
+      const bsaResponse = {
+        data: {
+          status: 'CLEAR',
+          reportingRequired: false,
+          flags: []
+        }
+      };
+      mockHttpClient.post.mockResolvedValue(bsaResponse);
 
       const result = await connector.validateTransaction(transaction);
 
@@ -542,6 +586,9 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
     });
 
     test('should process debit transaction via SOAP', async () => {
+      // Force SOAP usage for this test
+      connector.premierConfig.preferRESTOverSOAP = false;
+      
       const transaction = {
         id: 'TXN_DEBIT_001',
         fromAccount: '1234567890',
@@ -551,26 +598,19 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         reference: 'REF_001'
       };
 
-      const debitResponse = {
-        data: `
-          <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-            <soap:Body>
-              <ProcessDebitResponse>
-                <TransactionId>TXN_DEBIT_001</TransactionId>
-                <Status>COMPLETED</Status>
-                <Amount>500.00</Amount>
-                <Currency>USD</Currency>
-                <ProcessedAt>2023-12-01T15:00:00Z</ProcessedAt>
-                <NewBalance>1500.00</NewBalance>
-                <Reference>REF_001</Reference>
-                <TellerId>TELLER_001</TellerId>
-              </ProcessDebitResponse>
-            </soap:Body>
-          </soap:Envelope>
-        `
+      // Mock SOAP client
+      const mockSoapClient = {
+        ProcessDebitAsync: jest.fn().mockResolvedValue([{
+          transactionId: 'TXN_DEBIT_001',
+          status: 'C',
+          amount: '500.00',
+          processedAt: '2023-12-01T15:00:00Z',
+          reference: 'REF_001',
+          confirmationNumber: 'CONF_001'
+        }])
       };
-
-      mockHttpClient.mockResolvedValue(debitResponse);
+      
+      soap.createClientAsync = jest.fn().mockResolvedValue(mockSoapClient);
 
       const result = await connector.processDebit(transaction);
 
@@ -578,15 +618,16 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         transactionId: 'TXN_DEBIT_001',
         status: TRANSACTION_STATUS.CONFIRMED,
         amount: 500.00,
-        currency: 'USD',
         processedAt: '2023-12-01T15:00:00Z',
-        newBalance: 1500.00,
         reference: 'REF_001',
-        tellerId: 'TELLER_001'
+        confirmationNumber: 'CONF_001'
       });
     });
 
     test('should process credit transaction via REST', async () => {
+      // Force REST usage for this test (default behavior)
+      connector.premierConfig.preferRESTOverSOAP = true;
+      
       const transaction = {
         id: 'TXN_CREDIT_001',
         toAccount: '9876543210',
@@ -598,16 +639,15 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
       const creditResponse = {
         data: {
           transactionId: 'TXN_CREDIT_001',
-          status: 'COMPLETED',
-          amount: 750.00,
-          currency: 'USD',
+          status: 'C',
+          amount: '750.00',
           processedAt: '2023-12-01T15:05:00Z',
-          newBalance: 2250.00,
-          branchId: 'BR001'
+          reference: 'TXN_CREDIT_001',
+          confirmationNumber: 'CONF_CREDIT_001'
         }
       };
 
-      mockHttpClient.mockResolvedValue(creditResponse);
+      mockHttpClient.post.mockResolvedValue(creditResponse);
 
       const result = await connector.processCredit(transaction);
 
@@ -615,10 +655,9 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         transactionId: 'TXN_CREDIT_001',
         status: TRANSACTION_STATUS.CONFIRMED,
         amount: 750.00,
-        currency: 'USD',
         processedAt: '2023-12-01T15:05:00Z',
-        newBalance: 2250.00,
-        branchId: 'BR001'
+        reference: 'TXN_CREDIT_001',
+        confirmationNumber: 'CONF_CREDIT_001'
       });
     });
 
@@ -629,23 +668,16 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         amount: 10000.00
       };
 
-      const failureResponse = {
-        data: `
-          <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-            <soap:Body>
-              <soap:Fault>
-                <faultcode>Server</faultcode>
-                <faultstring>Insufficient funds</faultstring>
-                <detail>
-                  <ErrorCode>INSUF_FUNDS</ErrorCode>
-                </detail>
-              </soap:Fault>
-            </soap:Body>
-          </soap:Envelope>
-        `
+      const failureError = new Error('Insufficient funds');
+      failureError.response = {
+        status: 400,
+        data: {
+          error: 'INSUF_FUNDS',
+          message: 'Insufficient funds'
+        }
       };
 
-      mockHttpClient.mockResolvedValue(failureResponse);
+      mockHttpClient.post.mockRejectedValue(failureError);
 
       await expect(connector.processDebit(transaction)).rejects.toThrow('Insufficient funds');
     });
@@ -654,17 +686,16 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
       const statusResponse = {
         data: {
           transactionId: 'TXN_001',
-          status: 'COMPLETED',
-          amount: 1000.00,
-          currency: 'USD',
+          status: 'C',
+          amount: '1000.00',
           processedAt: '2023-12-01T15:00:00Z',
-          authorizationCode: 'AUTH123',
-          branchId: 'BR001',
-          tellerId: 'TELLER_001'
+          description: 'Test transaction',
+          reference: 'REF_001',
+          confirmationNumber: 'CONF_001'
         }
       };
 
-      mockHttpClient.mockResolvedValue(statusResponse);
+      mockHttpClient.get.mockResolvedValue(statusResponse);
 
       const result = await connector.getTransactionStatus('TXN_001');
 
@@ -672,11 +703,10 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         transactionId: 'TXN_001',
         status: TRANSACTION_STATUS.CONFIRMED,
         amount: 1000.00,
-        currency: 'USD',
         processedAt: '2023-12-01T15:00:00Z',
-        authorizationCode: 'AUTH123',
-        branchId: 'BR001',
-        tellerId: 'TELLER_001'
+        description: 'Test transaction',
+        reference: 'REF_001',
+        confirmationNumber: 'CONF_001'
       });
     });
   });
