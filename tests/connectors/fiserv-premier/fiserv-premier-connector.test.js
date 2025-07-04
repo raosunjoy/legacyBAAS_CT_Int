@@ -1146,6 +1146,7 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
       connector.premierMetrics.tellerTransactions = 20;
       connector.soapToken = 'SOAP_TOKEN_001';
       connector.restToken = 'REST_TOKEN_001';
+      connector.isConnected = true;
 
       const status = connector.getStatus();
 

@@ -324,6 +324,11 @@ class FISSystematicsConnector extends BaseBankingConnector {
         inquiryType: '01'
       });
 
+      // Check for error response
+      if (response.data.returnCode === 'ERROR') {
+        throw new Error(response.data.errorMessage || 'Account operation failed');
+      }
+
       // Parse fixed-width response using existing layout
       const accountData = this.parseFixedWidthRecord(
         response.data.recordData,
@@ -374,6 +379,11 @@ class FISSystematicsConnector extends BaseBankingConnector {
       const response = await this.callMainframeTransaction('BALQ', {
         accountNumber: accountNumber.padEnd(20, ' ')
       });
+
+      // Check for error response
+      if (response.data.returnCode === 'ERROR') {
+        throw new Error(response.data.errorMessage || 'Balance inquiry failed');
+      }
 
       const balanceData = this.parseFixedWidthRecord(
         response.data.recordData,
@@ -480,6 +490,11 @@ class FISSystematicsConnector extends BaseBankingConnector {
       // Submit to mainframe via CICS transaction
       const response = await this.callMainframeTransaction('DEBT', debitRecord);
 
+      // Check for error response
+      if (response.data.returnCode === 'ERROR') {
+        throw new Error(response.data.errorMessage || 'Debit transaction failed');
+      }
+
       // Parse response
       const result = this.parseFixedWidthRecord(
         response.data.recordData,
@@ -526,6 +541,11 @@ class FISSystematicsConnector extends BaseBankingConnector {
 
       const response = await this.callMainframeTransaction('CRDT', creditRecord);
 
+      // Check for error response
+      if (response.data.returnCode === 'ERROR') {
+        throw new Error(response.data.errorMessage || 'Credit transaction failed');
+      }
+
       const result = this.parseFixedWidthRecord(
         response.data.recordData,
         SYSTEMATICS_LAYOUTS.TRANSACTION_RECORD
@@ -564,6 +584,11 @@ class FISSystematicsConnector extends BaseBankingConnector {
       const response = await this.callMainframeTransaction('TXQS', {
         transactionId: transactionId.padEnd(16, ' ')
       });
+
+      // Check for error response
+      if (response.data.returnCode === 'ERROR') {
+        throw new Error(response.data.errorMessage || 'Transaction status query failed');
+      }
 
       const statusData = this.parseFixedWidthRecord(
         response.data.recordData,
@@ -1201,7 +1226,8 @@ class FISSystematicsConnector extends BaseBankingConnector {
 
   parseAmount(amountStr) {
     if (!amountStr) return 0;
-    return parseFloat(amountStr.replace(/[^\d.-]/g, '')) || 0;
+    const cents = parseFloat(amountStr.replace(/[^\d.-]/g, '')) || 0;
+    return cents / 100; // Convert from cents to dollars
   }
 
   formatAmount(amount) {

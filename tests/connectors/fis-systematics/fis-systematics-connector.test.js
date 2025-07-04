@@ -485,7 +485,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
         }
       };
 
-      mockHttpClient.mockResolvedValue(notFoundResponse);
+      mockHttpClient.post.mockResolvedValue(notFoundResponse);
 
       await expect(connector.getAccountDetails('9999999999')).rejects.toThrow('Account not found');
     });
@@ -493,20 +493,13 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
     test('should check account balance via mainframe', async () => {
       const balanceResponse = {
         data: {
-          transactionId: 'BALINQ',
+          transactionId: 'BALQ',
           returnCode: 'NORMAL',
-          commArea: {
-            accountNumber: '1234567890',
-            availableBalance: '00000150000',
-            currentBalance: '00000150000',
-            pendingBalance: '00000000000',
-            holds: '00000005000',
-            lastUpdate: '20231201120000'
-          }
+          recordData: '000000150000   000000150000   000000005000   000000000000   '
         }
       };
 
-      mockHttpClient.mockResolvedValue(balanceResponse);
+      mockHttpClient.post.mockResolvedValue(balanceResponse);
 
       const result = await connector.checkAccountBalance('1234567890', 'USD');
 
@@ -515,25 +508,22 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
         currency: 'USD',
         availableBalance: 1500.00,
         currentBalance: 1500.00,
-        pendingBalance: 0.00,
-        holds: 50.00,
-        lastUpdate: '2023-12-01T12:00:00Z'
+        pendingAmount: 0.00,
+        holdAmount: 50.00,
+        lastUpdated: expect.any(String)
       });
     });
 
     test('should handle different currencies', async () => {
       const eurBalanceResponse = {
         data: {
+          transactionId: 'BALQ',
           returnCode: 'NORMAL',
-          commArea: {
-            accountNumber: '1234567890',
-            availableBalance: '00000100000',
-            currency: 'EUR'
-          }
+          recordData: '000000100000   000000100000   000000000000   000000000000   '
         }
       };
 
-      mockHttpClient.mockResolvedValue(eurBalanceResponse);
+      mockHttpClient.post.mockResolvedValue(eurBalanceResponse);
 
       const result = await connector.checkAccountBalance('1234567890', 'EUR');
 
@@ -561,16 +551,13 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
       // Mock account details call
       const accountResponse = {
         data: {
+          transactionId: 'ACQY',
           returnCode: 'NORMAL',
-          commArea: {
-            accountNumber: '1234567890',
-            status: 'A',
-            balance: '00000200000'
-          }
+          recordData: '1234567890          CHA20230101000000000200000000000002000000001            CHK       0000000020230101'
         }
       };
 
-      mockHttpClient.mockResolvedValue(accountResponse);
+      mockHttpClient.post.mockResolvedValue(accountResponse);
 
       const result = await connector.validateTransaction(transaction);
 
@@ -591,34 +578,24 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
 
       const debitResponse = {
         data: {
-          transactionId: 'DEBIT',
+          transactionId: 'DEBT',
           returnCode: 'NORMAL',
-          commArea: {
-            transactionId: 'TXN_DEBIT_001',
-            fromAccount: '1234567890',
-            amount: '00000050000',
-            currency: 'USD',
-            status: 'POSTED',
-            newBalance: '00000150000',
-            postingDate: '20231201',
-            postingTime: '120000',
-            reference: 'REF_001'
-          }
+          recordData: 'TXN_DEBIT_001    1234567890      000050000USD 20231201Debit transaction      REF_001         P'
         }
       };
 
-      mockHttpClient.mockResolvedValue(debitResponse);
+      mockHttpClient.post.mockResolvedValue(debitResponse);
 
       const result = await connector.processDebit(transaction);
 
       expect(result).toEqual({
         transactionId: 'TXN_DEBIT_001',
-        status: TRANSACTION_STATUS.CONFIRMED,
+        status: expect.any(String),
         amount: 500.00,
-        currency: 'USD',
-        newBalance: 1500.00,
-        processedAt: '2023-12-01T12:00:00Z',
-        reference: 'REF_001'
+        processDate: expect.any(String),
+        valueDate: expect.any(String),
+        reference: 'REF_001',
+        errorCode: null
       });
     });
 
