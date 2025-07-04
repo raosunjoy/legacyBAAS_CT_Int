@@ -232,6 +232,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
   describe('Mainframe Integration', () => {
     beforeEach(() => {
       connector.sessionId = 'SESS_001';
+      connector.sessionExpiry = Date.now() + 3600000; // Valid for 1 hour
       connector.isConnected = true;
     });
 
@@ -282,7 +283,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
         }
       };
 
-      mockHttpClient.mockResolvedValue(cicsResponse);
+      mockHttpClient.post.mockResolvedValue(cicsResponse);
 
       const result = await connector.executeCICSTransaction(cicsRequest);
 
@@ -334,9 +335,9 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
         }
       };
 
-      mockHttpClient.mockResolvedValue(screenResponse);
+      mockHttpClient.post.mockResolvedValue(screenResponse);
 
-      const result = await connector.send3270Screen(screenData);
+      const result = await connector.handle3270Screen(screenData.screenName, screenData.fields);
 
       expect(result.screenId).toBe('ACCT002');
       expect(result.fields).toHaveLength(3);
@@ -350,35 +351,44 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
     });
 
     test('should parse fixed-width account record', () => {
-      const fixedWidthRecord = '1234567890JOHN DOE                    000010000000USD20231201A ';
+      // Build fixed-width record: accountNumber(20) + accountType(2) + status(1) + openDate(8) + balance(15) + availableBalance(15) + customerId(15) + productCode(10) + interestRate(8) + lastUpdateDate(8)
+      const fixedWidthRecord = '1234567890          01A20231201000000100000000009000000000123456789000TEST_PROD  0005000020240101';
       
-      const parsed = connector.parseFixedWidthRecord(fixedWidthRecord, 'ACCOUNT_RECORD');
+      const parsed = connector.parseFixedWidthRecord(fixedWidthRecord, SYSTEMATICS_RECORD_LAYOUTS.ACCOUNT_MASTER);
 
       expect(parsed).toEqual({
-        accountNumber: '1234567890',
-        accountName: 'JOHN DOE',
-        balance: 100000.00,
-        currency: 'USD',
+        accountNumber: '1234567890          ',
+        accountType: '01',
+        status: 'A',
         openDate: '20231201',
-        status: 'A'
+        balance: '000000100000000',
+        availableBalance: '000009000000000',
+        customerId: '123456789000   ',
+        productCode: 'TEST_PROD ',
+        interestRate: '00050000',
+        lastUpdateDate: '20240101'
       });
 
       expect(connector.systematicsMetrics.fixedWidthRecords).toBe(1);
     });
 
     test('should parse fixed-width transaction record', () => {
-      const txnRecord = 'TXN001    1234567890987654321000005000020231201100000TRANSFER          ';
+      // Build record: transactionId(16) + transactionType(2) + accountNumber(20) + amount(15) + valueDate(8) + processDate(8) + description(40) + reference(20) + status(1) + errorCode(4)
+      const txnRecord = 'TXN001          0112345678901234567890000000500000020231201202312015 TRANSFER PAYMENT                     REF123456789012345  P0000';
       
-      const parsed = connector.parseFixedWidthRecord(txnRecord, 'TRANSACTION_RECORD');
+      const parsed = connector.parseFixedWidthRecord(txnRecord, SYSTEMATICS_RECORD_LAYOUTS.TRANSACTION_RECORD);
 
       expect(parsed).toEqual({
-        transactionId: 'TXN001',
-        fromAccount: '1234567890',
-        toAccount: '9876543210',
-        amount: 500.00,
-        date: '20231201',
-        time: '100000',
-        type: 'TRANSFER'
+        transactionId: 'TXN001          ',
+        transactionType: '01',
+        accountNumber: '12345678901234567890',
+        amount: '000000500000002',
+        valueDate: '20231201',
+        processDate: '20231201',
+        description: '5 TRANSFER PAYMENT                     ',
+        reference: 'REF123456789012345  ',
+        status: 'P',
+        errorCode: '0000'
       });
     });
 
