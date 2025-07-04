@@ -1294,8 +1294,35 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
       expect(duration).toBeGreaterThanOrEqual(500);
     });
 
+    test('should enforce per-minute rate limiting', async () => {
+      mockHttpClient.mockImplementation(() => Promise.resolve({
+        data: {},
+        config: { metadata: { startTime: Date.now() } }
+      }));
+
+      // Set low per-minute limit for testing
+      connector.dnaConfig.rateLimitPerMinute = 2;
+      
+      // Pre-fill request times to hit the per-minute limit
+      const now = Date.now();
+      connector.requestTimes = [now - 50000, now - 40000]; // Two requests within the minute
+      
+      const start = Date.now();
+      
+      // This should trigger the per-minute rate limiting (line 676)
+      await connector.makeApiCall('GET', '/test-minute-limit');
+      
+      const duration = Date.now() - start;
+      
+      // Should have been delayed due to per-minute rate limiting
+      expect(duration).toBeGreaterThan(0);
+    });
+
     test('should track rate limit metrics', async () => {
-      mockHttpClient.mockResolvedValue({ data: {} });
+      mockHttpClient.mockImplementation(() => Promise.resolve({
+        data: {},
+        config: { metadata: { startTime: Date.now() } }
+      }));
       
       await connector.makeApiCall('GET', '/test');
       
