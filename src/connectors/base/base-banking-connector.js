@@ -102,6 +102,7 @@ class BaseBankingConnector extends EventEmitter {
       timeoutErrors: 0,
       complianceChecks: 0,
       transactionsProcessed: 0,
+      failedTransactions: 0,
       uptime: Date.now()
     };
 

@@ -422,12 +422,10 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
         expect(mockHttpClient).toHaveBeenCalledWith(expect.objectContaining({
           method: 'get',
           url: expect.stringContaining('/accounts'),
-          data: expect.objectContaining({
-            params: expect.objectContaining({
-              includeHistory: true,
-              includeCustomer: true,
-              historyDays: 30
-            })
+          params: expect.objectContaining({
+            includeHistory: true,
+            includeCustomer: true,
+            historyDays: 30
           })
         }));
       });
@@ -476,10 +474,11 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
         await connector.checkAccountBalance('1234567890');
 
         expect(mockHttpClient).toHaveBeenCalledWith(expect.objectContaining({
-          data: expect.objectContaining({
-            params: expect.objectContaining({
-              currency: 'USD'
-            })
+          method: 'get',
+          url: expect.stringContaining('/accounts/balance'),
+          params: expect.objectContaining({
+            accountNumber: '1234567890',
+            currency: 'USD'
           })
         }));
       });
@@ -489,18 +488,21 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
           data: {
             availableBalance: '2000.00',
             currentBalance: '2000.00'
-          }
+          },
+          config: { metadata: { startTime: Date.now() } }
         };
 
-        mockHttpClient.mockResolvedValue(balanceData);
+        mockHttpClient.mockImplementationOnce(() => Promise.resolve(balanceData));
 
-        // First call
+        // First call - should hit the API and cache miss
         await connector.checkAccountBalance('1234567890');
         expect(connector.dnaMetrics.cacheMisses).toBe(1);
+        expect(connector.dnaMetrics.cacheHits).toBe(0);
 
-        // Second call should use cache
+        // Second call should use cache (no additional API call)
         await connector.checkAccountBalance('1234567890');
         expect(connector.dnaMetrics.cacheHits).toBe(1);
+        expect(connector.dnaMetrics.cacheMisses).toBe(1);
         expect(mockHttpClient).toHaveBeenCalledTimes(1);
       });
     });
@@ -666,11 +668,15 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
         }
       };
 
+      // Reset metrics first
+      connector.dnaMetrics.complianceChecks = 0;
+
       mockHttpClient
         .mockImplementationOnce(() => Promise.resolve({ 
           data: { 
             accountNumber: '1234567890',
             accountType: 'CHECKING',
+            accountStatus: 'ACTIVE',
             status: 'ACTIVE',
             currency: 'USD',
             balances: {},
@@ -763,16 +769,41 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
         type: 'debit',
         fromAccount: '1234567890',
         amount: 5000.00,
+        currency: 'USD',
         isInternational: true
       };
 
       mockHttpClient
-        .mockResolvedValueOnce({ data: { status: 'ACTIVE' } })
-        .mockResolvedValueOnce({ data: { availableBalance: '10000.00' } });
+        .mockImplementationOnce(() => Promise.resolve({ 
+          data: { 
+            accountNumber: '1234567890',
+            accountType: 'CHECKING',
+            accountStatus: 'ACTIVE',
+            status: 'ACTIVE',
+            currency: 'USD',
+            balances: {},
+            holds: [],
+            fees: [],
+            restrictions: [],
+            metadata: {}
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }))
+        .mockImplementationOnce(() => Promise.resolve({ 
+          data: { 
+            availableBalance: '10000.00',
+            currentBalance: '10000.00',
+            pendingBalance: '0.00',
+            holds: [],
+            lastUpdated: new Date().toISOString()
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
       const result = await connector.validateTransaction(transaction);
 
       expect(result.warnings).toContain('International transaction - additional fees may apply');
+      expect(result.isValid).toBe(true);
     });
   });
 
@@ -833,13 +864,16 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
           amount: 500.00
         };
 
+        // Reset metrics
+        connector.metrics.failedTransactions = 0;
+
         const error = new Error('Debit failed');
         error.response = {
           status: 400,
           data: { code: 'INSUFFICIENT_FUNDS' }
         };
 
-        mockHttpClient.mockRejectedValue(error);
+        mockHttpClient.mockImplementationOnce(() => Promise.reject(error));
 
         await expect(connector.processDebit(transaction)).rejects.toThrow();
         expect(connector.metrics.failedTransactions).toBe(1);
@@ -856,15 +890,29 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
           }
         };
 
-        mockHttpClient.mockResolvedValue({
-          data: { status: 'COMPLETED' }
-        });
+        mockHttpClient.mockImplementationOnce(() => Promise.resolve({
+          data: { 
+            transactionId: 'TXN_DEBIT_003',
+            status: 'COMPLETED',
+            amount: 100.00,
+            currency: 'USD',
+            processedAt: new Date().toISOString(),
+            newBalance: 900.00,
+            reference: 'TXN_DEBIT_003'
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
         await connector.processDebit(transaction);
 
         expect(mockHttpClient).toHaveBeenCalledWith(expect.objectContaining({
+          method: 'post',
+          url: '/transactions/debit',
           data: expect.objectContaining({
-            metadata: transaction.metadata
+            metadata: expect.objectContaining({
+              blockchain: 'ethereum',
+              useCase: 'cross_border_payments'
+            })
           })
         }));
       });
@@ -919,17 +967,25 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
           currency: 'EUR'
         };
 
-        mockHttpClient.mockResolvedValue({
+        mockHttpClient.mockImplementationOnce(() => Promise.resolve({
           data: {
+            transactionId: 'TXN_CREDIT_002',
             status: 'COMPLETED',
+            amount: 100.00,
             currency: 'EUR',
+            processedAt: new Date().toISOString(),
+            newBalance: 1100.00,
+            reference: 'TXN_CREDIT_002',
             exchangeRate: 1.09
-          }
-        });
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
         await connector.processCredit(transaction);
 
         expect(mockHttpClient).toHaveBeenCalledWith(expect.objectContaining({
+          method: 'post',
+          url: '/transactions/credit',
           data: expect.objectContaining({
             currency: 'EUR'
           })
@@ -974,18 +1030,39 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
       });
 
       test('should handle pending status', async () => {
-        mockHttpClient.mockResolvedValue({
-          data: { status: 'PENDING' }
-        });
+        mockHttpClient.mockImplementationOnce(() => Promise.resolve({
+          data: { 
+            transactionId: 'TXN_002',
+            status: 'PENDING',
+            amount: 500.00,
+            currency: 'USD',
+            processedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            reference: 'TXN_002',
+            metadata: {}
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
         const result = await connector.getTransactionStatus('TXN_002');
         expect(result.status).toBe(TRANSACTION_STATUS.PENDING);
       });
 
       test('should handle failed status', async () => {
-        mockHttpClient.mockResolvedValue({
-          data: { status: 'FAILED', failureReason: 'Insufficient funds' }
-        });
+        mockHttpClient.mockImplementationOnce(() => Promise.resolve({
+          data: { 
+            transactionId: 'TXN_003',
+            status: 'FAILED',
+            amount: 750.00,
+            currency: 'USD',
+            processedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            reference: 'TXN_003',
+            failureReason: 'Insufficient funds',
+            metadata: {}
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
         const result = await connector.getTransactionStatus('TXN_003');
         expect(result.status).toBe(TRANSACTION_STATUS.FAILED);

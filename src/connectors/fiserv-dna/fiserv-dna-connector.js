@@ -54,7 +54,19 @@ const DNA_ENDPOINTS = {
   ACCOUNT_OPENING: '/accounts/open',
   ACCOUNT_CLOSURE: '/accounts/close',
   LOAN_ORIGINATION: '/loans/originate',
-  DEPOSIT_SERVICES: '/deposits/manage'
+  DEPOSIT_SERVICES: '/deposits/manage',
+  
+  // Transaction Management
+  TRANSACTIONS: '/transactions',
+  
+  // Compliance & Risk
+  COMPLIANCE_CHECK: '/compliance/check',
+  
+  // Webhook Management
+  WEBHOOKS: '/webhooks',
+  
+  // Health & Status
+  HEALTH: '/health'
 };
 
 /**
@@ -157,6 +169,7 @@ class FiservDNAConnector extends BaseBankingConnector {
     // Account details cache
     this.accountCache = new Map();
     this.customerCache = new Map();
+    this.complianceCache = new Map();
     
     // Rate limiting
     this.requestTimes = [];
@@ -288,7 +301,9 @@ class FiservDNAConnector extends BaseBankingConnector {
           accountNumber,
           includeBalances: options.includeBalances || true,
           includeHolds: options.includeHolds || false,
-          includeHistory: options.includeHistory || false
+          includeHistory: options.includeHistory || false,
+          includeCustomer: options.includeCustomer || false,
+          historyDays: options.historyDays || 0
         }
       });
 
@@ -335,12 +350,23 @@ class FiservDNAConnector extends BaseBankingConnector {
    * @returns {Promise<Object>}
    */
   async checkAccountBalance(accountNumber, currency = 'USD') {
+    const cacheKey = `balance:${accountNumber}:${currency}`;
+    
+    // Check cache first
+    if (this.dnaConfig.enableCaching && this.accountCache.has(cacheKey)) {
+      const cached = this.accountCache.get(cacheKey);
+      if (Date.now() - cached.timestamp < this.dnaConfig.cacheExpiry) {
+        this.dnaMetrics.cacheHits++;
+        return cached.data;
+      }
+    }
+
     try {
       const response = await this.makeApiCall('GET', DNA_ENDPOINTS.ACCOUNT_BALANCE, {
         params: { accountNumber, currency }
       });
 
-      return {
+      const balanceData = {
         accountNumber,
         currency,
         availableBalance: parseFloat(response.data.availableBalance),
@@ -349,6 +375,17 @@ class FiservDNAConnector extends BaseBankingConnector {
         holds: response.data.holds || [],
         lastUpdated: response.data.lastUpdated || new Date().toISOString()
       };
+
+      // Cache the result
+      if (this.dnaConfig.enableCaching) {
+        this.accountCache.set(cacheKey, {
+          data: balanceData,
+          timestamp: Date.now()
+        });
+      }
+
+      this.dnaMetrics.cacheMisses++;
+      return balanceData;
 
     } catch (error) {
       logger.error('Failed to check DNA account balance', {
@@ -391,6 +428,11 @@ class FiservDNAConnector extends BaseBankingConnector {
           validation.isValid = false;
           validation.errors.push('Insufficient funds');
         }
+      }
+
+      // International transaction warnings
+      if (transaction.isInternational) {
+        validation.warnings.push('International transaction - additional fees may apply');
       }
 
       // Compliance screening
@@ -448,6 +490,7 @@ class FiservDNAConnector extends BaseBankingConnector {
       };
 
     } catch (error) {
+      this.metrics.failedTransactions++;
       logger.error('DNA debit processing failed', {
         transactionId: transaction.id,
         error: error.message
@@ -720,6 +763,308 @@ class FiservDNAConnector extends BaseBankingConnector {
     };
   }
 
+
+  /**
+   * Register webhook
+   * @param {string} eventType 
+   * @param {string} url 
+   * @param {Function} handler 
+   * @returns {Promise<Object>}
+   */
+  async registerWebhook(eventType, url, handler) {
+    try {
+      await this.ensureAuthenticated();
+
+      const webhookRequest = {
+        eventType,
+        callbackUrl: url,
+        active: true
+      };
+
+      const response = await this.makeRequest('POST', DNA_ENDPOINTS.WEBHOOKS, webhookRequest);
+      
+      const webhookId = response.data.webhookId;
+      if (handler) {
+        this.webhookHandlers.set(webhookId, handler);
+      }
+
+      return {
+        webhookId,
+        eventType,
+        url,
+        active: true
+      };
+
+    } catch (error) {
+      logger.error('DNA webhook registration failed', {
+        eventType,
+        url,
+        error: error.message
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Unregister webhook
+   * @param {string} webhookId 
+   * @returns {Promise<void>}
+   */
+  async unregisterWebhook(webhookId) {
+    try {
+      await this.ensureAuthenticated();
+      await this.makeRequest('DELETE', `${DNA_ENDPOINTS.WEBHOOKS}/${webhookId}`);
+      this.webhookHandlers.delete(webhookId);
+    } catch (error) {
+      logger.error('DNA webhook unregistration failed', {
+        webhookId,
+        error: error.message
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * List active webhooks
+   * @returns {Promise<Array>}
+   */
+  async listWebhooks() {
+    try {
+      await this.ensureAuthenticated();
+      const response = await this.makeRequest('GET', DNA_ENDPOINTS.WEBHOOKS);
+      return response.data.webhooks || [];
+    } catch (error) {
+      logger.error('DNA webhook listing failed', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Process webhook event
+   * @param {Object} event 
+   * @returns {Promise<void>}
+   */
+  async processWebhookEvent(event) {
+    try {
+      const handler = this.webhookHandlers.get(event.webhookId);
+      if (handler) {
+        await handler(event);
+      } else {
+        logger.warn('No handler registered for webhook', { webhookId: event.webhookId });
+      }
+    } catch (error) {
+      logger.error('Webhook event processing failed', {
+        webhookId: event.webhookId,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Generate cache key
+   * @param {string} prefix 
+   * @param {string} identifier 
+   * @returns {string}
+   */
+  generateCacheKey(prefix, identifier) {
+    return `${prefix}:${identifier}`;
+  }
+
+  /**
+   * Check cache validity
+   * @param {Object} cacheEntry 
+   * @param {number} maxAge 
+   * @returns {boolean}
+   */
+  isCacheValid(cacheEntry, maxAge = 300000) {
+    return cacheEntry && (Date.now() - cacheEntry.timestamp < maxAge);
+  }
+
+  /**
+   * Clear all caches
+   */
+  clearAllCaches() {
+    this.accountCache.clear();
+    this.customerCache.clear();
+    this.complianceCache.clear();
+  }
+
+  /**
+   * Clear expired cache entries
+   */
+  clearExpiredCaches() {
+    const now = Date.now();
+    const maxAge = 300000;
+
+    for (const [key, entry] of this.accountCache.entries()) {
+      if (now - entry.timestamp > maxAge) {
+        this.accountCache.delete(key);
+      }
+    }
+
+    for (const [key, entry] of this.customerCache.entries()) {
+      if (now - entry.timestamp > maxAge) {
+        this.customerCache.delete(key);
+      }
+    }
+
+    for (const [key, entry] of this.complianceCache.entries()) {
+      if (now - entry.timestamp > maxAge) {
+        this.complianceCache.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Clean up old request times for rate limiting
+   */
+  cleanupRequestTimes() {
+    const now = Date.now();
+    const oneMinuteAgo = now - 60000;
+    this.requestTimes = this.requestTimes.filter(time => time > oneMinuteAgo);
+  }
+
+  /**
+   * Handle real-time notifications
+   * @param {Object} notification 
+   */
+  handleRealTimeNotification(notification) {
+    try {
+      this.emit('notification', notification);
+      logger.info('Real-time notification received', { type: notification.type });
+    } catch (error) {
+      logger.error('Real-time notification handling failed', { error: error.message });
+    }
+  }
+
+  /**
+   * Support batch operations
+   * @param {Array} operations 
+   * @returns {Promise<Array>}
+   */
+  async processBatchOperations(operations) {
+    try {
+      await this.ensureAuthenticated();
+
+      const batchRequest = {
+        operations: operations.map(op => ({
+          type: op.type,
+          accountId: op.accountId,
+          amount: op.amount,
+          reference: op.reference
+        }))
+      };
+
+      const response = await this.makeRequest('POST', `${DNA_ENDPOINTS.TRANSACTIONS}/batch`, batchRequest);
+      return response.data.results || [];
+
+    } catch (error) {
+      logger.error('Batch operations failed', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Handle mutual TLS configuration
+   * @param {Object} tlsConfig 
+   */
+  configureMutualTLS(tlsConfig) {
+    if (this.dnaConfig.enableMutualTLS && tlsConfig) {
+      this.httpClient.defaults.httpsAgent = new require('https').Agent({
+        cert: tlsConfig.clientCert,
+        key: tlsConfig.clientKey,
+        ca: tlsConfig.caCert,
+        rejectUnauthorized: true
+      });
+    }
+  }
+
+  /**
+   * Query transaction history
+   * @param {Object} criteria 
+   * @returns {Promise<Array>}
+   */
+  async queryTransactionHistory(criteria) {
+    try {
+      await this.ensureAuthenticated();
+
+      const queryParams = {
+        accountId: criteria.accountId,
+        startDate: criteria.startDate,
+        endDate: criteria.endDate,
+        limit: criteria.limit || 100,
+        offset: criteria.offset || 0
+      };
+
+      const response = await this.makeRequest('GET', `${DNA_ENDPOINTS.TRANSACTIONS}/history`, { params: queryParams });
+      return response.data.transactions || [];
+
+    } catch (error) {
+      logger.error('Transaction history query failed', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Get health status
+   * @returns {Promise<Object>}
+   */
+  async getHealthStatus() {
+    try {
+      const response = await this.makeRequest('GET', DNA_ENDPOINTS.HEALTH);
+      return {
+        healthy: response.data.status === 'UP',
+        services: response.data.services || {},
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * Calculate cache hit ratio
+   * @returns {Object}
+   */
+  calculateCacheHitRatio() {
+    const totalRequests = this.metrics.successfulRequests + this.metrics.failedRequests;
+    const cacheHits = this.dnaMetrics.cacheHits || 0;
+    
+    return {
+      hitRatio: totalRequests > 0 ? cacheHits / totalRequests : 0,
+      totalRequests,
+      cacheHits
+    };
+  }
+
+  /**
+   * Cleanup resources
+   * @returns {Promise<void>}
+   */
+  async cleanup() {
+    try {
+      // Clear all caches
+      this.clearAllCaches();
+      
+      // Unregister all webhooks
+      const webhookIds = Array.from(this.webhookHandlers.keys());
+      await Promise.all(webhookIds.map(id => this.unregisterWebhook(id).catch(() => {})));
+      
+      // Clear timers and intervals
+      this.requestTimes = [];
+      
+      this.emit('cleanup', { timestamp: new Date().toISOString() });
+      
+      logger.info('DNA connector cleanup completed');
+    } catch (error) {
+      logger.error('DNA connector cleanup failed', { error: error.message });
+    }
+  }
+
   /**
    * Get enhanced status including DNA-specific metrics
    * @returns {Object}
@@ -737,11 +1082,13 @@ class FiservDNAConnector extends BaseBankingConnector {
       },
       cacheStatus: {
         accountCacheSize: this.accountCache.size,
-        customerCacheSize: this.customerCache.size
+        customerCacheSize: this.customerCache.size,
+        hitRatio: this.calculateCacheHitRatio()
       },
       webhookStatus: {
         registeredWebhooks: Array.from(this.webhookHandlers.keys())
-      }
+      },
+      healthStatus: this.isConnected && this.accessToken ? 'healthy' : 'unhealthy'
     };
   }
 }
