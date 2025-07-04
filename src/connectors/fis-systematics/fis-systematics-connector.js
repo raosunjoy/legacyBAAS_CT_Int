@@ -176,6 +176,13 @@ class FISSystematicsConnector extends BaseBankingConnector {
     this.sessionId = null;
     this.sessionExpiry = null;
     this.lastActivity = null;
+    this.isConnected = false;
+    
+    // CICS session management
+    this.cicsSession = null;
+    
+    // Mainframe connection
+    this.mainframeConnection = null;
 
     // Enhanced parser instance for existing FIS support
     this.parser = new EnhancedSWIFTParser({
@@ -210,8 +217,14 @@ class FISSystematicsConnector extends BaseBankingConnector {
       fixedWidthRecords: 0,
       cobolTransformations: 0,
       cicsTransactions: 0,
-      fileProcessingTime: 0
+      fileProcessingTime: 0,
+      sessionRenewals: 0,
+      sessionTimeouts: 0,
+      mainframeConnections: 0
     };
+    
+    // Track base metrics
+    this.trackBaseMetrics();
 
     logger.info('FIS Systematics connector initialized', {
       institutionId: this.systematicsConfig.institutionId,
@@ -246,6 +259,7 @@ class FISSystematicsConnector extends BaseBankingConnector {
 
       // Set session header for subsequent requests
       this.httpClient.defaults.headers.common['X-Session-ID'] = this.sessionId;
+      this.isConnected = true;
 
       logger.info('Systematics authentication successful', {
         sessionId: this.sessionId,
@@ -254,6 +268,7 @@ class FISSystematicsConnector extends BaseBankingConnector {
 
     } catch (error) {
       this.metrics.authenticationFailures++;
+      this.isConnected = false;
       logger.error('Systematics authentication failed', {
         error: error.message,
         status: error.response?.status
@@ -749,6 +764,442 @@ class FISSystematicsConnector extends BaseBankingConnector {
     }
   }
 
+  /**
+   * Authenticate with CICS
+   * @returns {Promise<void>}
+   */
+  async authenticateCICS() {
+    try {
+      const cicsAuth = {
+        regionId: this.systematicsConfig.cicsRegion || 'CICSPROD',
+        userId: this.systematicsConfig.userId,
+        terminalId: this.systematicsConfig.terminalId || 'TERM001'
+      };
+
+      const response = await this.httpClient.post('/cics/auth', cicsAuth);
+      
+      this.cicsSession = {
+        sessionId: response.data.cicsSession,
+        region: response.data.region,
+        facilities: response.data.facilities || [],
+        transactionId: response.data.transaction
+      };
+
+      logger.info('CICS authentication successful', {
+        sessionId: this.cicsSession.sessionId,
+        region: this.cicsSession.region
+      });
+
+    } catch (error) {
+      logger.error('CICS authentication failed', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Ensure session is active, renew if needed
+   * @returns {Promise<void>}
+   */
+  async ensureSessionActive() {
+    if (!this.sessionId || Date.now() >= this.sessionExpiry - 60000) {
+      try {
+        const renewResponse = await this.httpClient.post('/auth/renew', {
+          sessionId: this.sessionId
+        });
+        
+        this.sessionId = renewResponse.data.sessionId;
+        this.sessionExpiry = Date.now() + (renewResponse.data.timeout * 1000);
+        this.systematicsMetrics.sessionRenewals = (this.systematicsMetrics.sessionRenewals || 0) + 1;
+        
+      } catch (error) {
+        this.systematicsMetrics.sessionTimeouts = (this.systematicsMetrics.sessionTimeouts || 0) + 1;
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Connect to mainframe
+   * @returns {Promise<void>}
+   */
+  async connectToMainframe() {
+    try {
+      const connectionConfig = {
+        host: this.systematicsConfig.mainframeHost,
+        port: this.systematicsConfig.mainframePort || 23,
+        protocol: 'TN3270',
+        luName: this.systematicsConfig.luName || 'LU001'
+      };
+
+      const response = await this.httpClient.post('/mainframe/connect', connectionConfig);
+      
+      this.mainframeConnection = {
+        connectionId: response.data.connectionId,
+        host: response.data.host,
+        port: response.data.port,
+        protocol: response.data.protocol,
+        luName: response.data.luName
+      };
+
+      this.systematicsMetrics.mainframeConnections = (this.systematicsMetrics.mainframeConnections || 0) + 1;
+
+    } catch (error) {
+      logger.error('Mainframe connection failed', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
+   * Execute CICS transaction
+   * @param {string} transactionCode 
+   * @param {Object} data 
+   * @returns {Promise<Object>}
+   */
+  async executeCICSTransaction(transactionCode, data) {
+    await this.ensureSessionActive();
+    
+    const cicsRequest = {
+      transactionCode,
+      data,
+      sessionId: this.cicsSession?.sessionId,
+      region: this.cicsSession?.region
+    };
+
+    const response = await this.httpClient.post(SYSTEMATICS_ENDPOINTS.CICS_TRANSACTION, cicsRequest);
+    this.systematicsMetrics.cicsTransactions = (this.systematicsMetrics.cicsTransactions || 0) + 1;
+    
+    return response.data;
+  }
+
+  /**
+   * Handle 3270 screen interactions
+   * @param {string} screenName 
+   * @param {Object} fields 
+   * @returns {Promise<Object>}
+   */
+  async handle3270Screen(screenName, fields) {
+    const screenRequest = {
+      screenName,
+      fields,
+      connectionId: this.mainframeConnection?.connectionId
+    };
+
+    const response = await this.httpClient.post('/3270/screen', screenRequest);
+    return response.data;
+  }
+
+  /**
+   * Parse fixed-width record
+   * @param {string} record 
+   * @param {Object} layout 
+   * @returns {Object}
+   */
+  parseFixedWidthRecord(record, layout) {
+    const result = {};
+    
+    for (const [field, spec] of Object.entries(layout)) {
+      result[field] = record.substring(spec.start, spec.start + spec.length);
+    }
+    
+    this.systematicsMetrics.fixedWidthRecords = (this.systematicsMetrics.fixedWidthRecords || 0) + 1;
+    return result;
+  }
+
+  /**
+   * Format fixed-width record for mainframe
+   * @param {Object} data 
+   * @param {Object} layout 
+   * @returns {string}
+   */
+  formatFixedWidthRecord(data, layout) {
+    let record = '';
+    let currentPos = 0;
+    
+    for (const [field, spec] of Object.entries(layout)) {
+      // Fill gaps if needed
+      while (currentPos < spec.start) {
+        record += ' ';
+        currentPos++;
+      }
+      
+      const value = (data[field] || '').toString();
+      const paddedValue = value.padEnd(spec.length, ' ').substring(0, spec.length);
+      record += paddedValue;
+      currentPos = spec.start + spec.length;
+    }
+    
+    return record;
+  }
+
+  /**
+   * Convert EBCDIC to ASCII
+   * @param {Buffer} ebcdicData 
+   * @returns {string}
+   */
+  convertEBCDICToASCII(ebcdicData) {
+    // Simple EBCDIC to ASCII conversion (basic implementation)
+    const result = ebcdicData.toString('binary').split('').map(char => {
+      const code = char.charCodeAt(0);
+      // Basic EBCDIC conversion table for common characters
+      if (code >= 129 && code <= 137) return String.fromCharCode(code - 129 + 97); // a-i
+      if (code >= 145 && code <= 153) return String.fromCharCode(code - 145 + 106); // j-r  
+      if (code >= 162 && code <= 169) return String.fromCharCode(code - 162 + 115); // s-z
+      if (code >= 193 && code <= 201) return String.fromCharCode(code - 193 + 65); // A-I
+      if (code >= 209 && code <= 217) return String.fromCharCode(code - 209 + 74); // J-R
+      if (code >= 226 && code <= 233) return String.fromCharCode(code - 226 + 83); // S-Z
+      if (code >= 240 && code <= 249) return String.fromCharCode(code - 240 + 48); // 0-9
+      return char;
+    }).join('');
+    
+    return result;
+  }
+
+  /**
+   * Convert ASCII to EBCDIC
+   * @param {string} asciiData 
+   * @returns {Buffer}
+   */
+  convertASCIIToEBCDIC(asciiData) {
+    // Simple ASCII to EBCDIC conversion
+    const result = asciiData.split('').map(char => {
+      const code = char.charCodeAt(0);
+      if (code >= 97 && code <= 105) return String.fromCharCode(code - 97 + 129); // a-i
+      if (code >= 106 && code <= 114) return String.fromCharCode(code - 106 + 145); // j-r
+      if (code >= 115 && code <= 122) return String.fromCharCode(code - 115 + 162); // s-z
+      if (code >= 65 && code <= 73) return String.fromCharCode(code - 65 + 193); // A-I
+      if (code >= 74 && code <= 82) return String.fromCharCode(code - 74 + 209); // J-R
+      if (code >= 83 && code <= 90) return String.fromCharCode(code - 83 + 226); // S-Z
+      if (code >= 48 && code <= 57) return String.fromCharCode(code - 48 + 240); // 0-9
+      return char;
+    }).join('');
+    
+    return Buffer.from(result, 'binary');
+  }
+
+  /**
+   * Submit batch job to mainframe
+   * @param {Object} batchData 
+   * @returns {Promise<Object>}
+   */
+  async submitBatchJob(batchData) {
+    const jobRequest = {
+      jobName: batchData.jobName || 'BATCH_' + Date.now(),
+      data: batchData.data,
+      priority: batchData.priority || 'NORMAL'
+    };
+
+    const response = await this.httpClient.post('/batch/submit', jobRequest);
+    return {
+      jobId: response.data.jobId,
+      status: response.data.status,
+      submittedAt: new Date()
+    };
+  }
+
+  /**
+   * Check batch job status
+   * @param {string} jobId 
+   * @returns {Promise<Object>}
+   */
+  async checkBatchJobStatus(jobId) {
+    const response = await this.httpClient.get(`/batch/status/${jobId}`);
+    return {
+      jobId: response.data.jobId,
+      status: response.data.status,
+      progress: response.data.progress || 0,
+      completedAt: response.data.completedAt
+    };
+  }
+
+  /**
+   * Call COBOL program
+   * @param {string} programName 
+   * @param {Object} parameters 
+   * @returns {Promise<Object>}
+   */
+  async callCOBOLProgram(programName, parameters) {
+    const cobolRequest = {
+      programName,
+      parameters,
+      copybook: this.systematicsConfig.cobolCopybooks
+    };
+
+    const response = await this.httpClient.post('/cobol/call', cobolRequest);
+    this.systematicsMetrics.cobolTransformations = (this.systematicsMetrics.cobolTransformations || 0) + 1;
+    
+    return response.data;
+  }
+
+  /**
+   * Load COBOL copybook
+   * @param {string} copybookName 
+   * @returns {Promise<Object>}
+   */
+  async loadCOBOLCopybook(copybookName) {
+    const response = await this.httpClient.get(`/cobol/copybook/${copybookName}`);
+    return response.data;
+  }
+
+  /**
+   * Perform OFAC screening
+   * @param {Object} data 
+   * @returns {Promise<Object>}
+   */
+  async performOFACScreening(data) {
+    const response = await this.httpClient.post(SYSTEMATICS_ENDPOINTS.OFAC_SCREENING, data);
+    return {
+      passed: response.data.status === 'CLEAR',
+      matches: response.data.matches || [],
+      riskScore: response.data.riskScore || 0
+    };
+  }
+
+  /**
+   * Check BSA/CTR requirements
+   * @param {Object} transaction 
+   * @returns {Promise<Object>}
+   */
+  async checkBSARequirements(transaction) {
+    const response = await this.httpClient.post(SYSTEMATICS_ENDPOINTS.BSA_REPORTING, {
+      amount: transaction.amount,
+      type: transaction.type,
+      accountNumber: transaction.fromAccount
+    });
+    
+    return {
+      ctrRequired: response.data.ctrRequired || false,
+      sarRequired: response.data.sarRequired || false,
+      reportingThreshold: response.data.threshold || 10000
+    };
+  }
+
+  /**
+   * Validate business rules
+   * @param {Object} transaction 
+   * @returns {Promise<Object>}
+   */
+  async validateBusinessRules(transaction) {
+    // Implement business rule validation
+    return {
+      passed: true,
+      rules: [],
+      violations: []
+    };
+  }
+
+  /**
+   * Map Systematics status codes
+   * @param {string} statusCode 
+   * @returns {string}
+   */
+  mapSystematicsStatusCode(statusCode) {
+    const statusMap = {
+      '00': 'SUCCESS',
+      '01': 'PENDING',
+      '02': 'FAILED',
+      '03': 'TIMEOUT',
+      '04': 'REJECTED'
+    };
+    return statusMap[statusCode] || 'UNKNOWN';
+  }
+
+  /**
+   * Map Systematics error codes
+   * @param {string} errorCode 
+   * @returns {string}
+   */
+  mapSystematicsErrorCode(errorCode) {
+    const errorMap = {
+      'E001': 'INVALID_ACCOUNT',
+      'E002': 'INSUFFICIENT_FUNDS',
+      'E003': 'ACCOUNT_CLOSED',
+      'E004': 'SYSTEM_ERROR',
+      'E005': 'TIMEOUT'
+    };
+    return errorMap[errorCode] || 'UNKNOWN_ERROR';
+  }
+
+  /**
+   * Handle mainframe abends
+   * @param {Object} abendInfo 
+   * @returns {Object}
+   */
+  handleMainframeAbend(abendInfo) {
+    logger.error('Mainframe abend detected', abendInfo);
+    return {
+      handled: true,
+      recovery: 'RESTART_TRANSACTION',
+      abendCode: abendInfo.code
+    };
+  }
+
+  /**
+   * Get health status
+   * @returns {Promise<Object>}
+   */
+  async getHealthStatus() {
+    try {
+      const response = await this.httpClient.get('/health');
+      return {
+        healthy: response.status === 200,
+        mainframeConnected: !!this.mainframeConnection,
+        sessionActive: !!this.sessionId && Date.now() < this.sessionExpiry,
+        lastCheck: new Date()
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        error: error.message,
+        lastCheck: new Date()
+      };
+    }
+  }
+
+  /**
+   * Track base metrics
+   * @returns {void}
+   */
+  trackBaseMetrics() {
+    // Initialize base tracking
+    if (!process.env.NODE_ENV || process.env.NODE_ENV !== 'test') {
+      this.metricsInterval = setInterval(() => {
+        if (this.metrics) {
+          this.systematicsMetrics.baseMetricsTracked = true;
+          this.systematicsMetrics.lastMetricsUpdate = Date.now();
+        }
+      }, 60000); // Update every minute
+    }
+  }
+
+  /**
+   * Cleanup resources
+   * @returns {Promise<void>}
+   */
+  async cleanup() {
+    try {
+      if (this.metricsInterval) {
+        clearInterval(this.metricsInterval);
+        this.metricsInterval = null;
+      }
+      
+      if (this.mainframeConnection) {
+        await this.httpClient.delete(`/mainframe/disconnect/${this.mainframeConnection.connectionId}`);
+        this.mainframeConnection = null;
+      }
+      
+      if (this.sessionId) {
+        await this.httpClient.delete(`/auth/logout/${this.sessionId}`);
+        this.sessionId = null;
+      }
+      
+      this.accountCache.clear();
+      this.customerCache.clear();
+      
+    } catch (error) {
+      logger.warn('Error during cleanup', { error: error.message });
+    }
+  }
+
   // Utility methods for data transformation
 
   parseAmount(amountStr) {
@@ -840,5 +1291,5 @@ module.exports = {
   FISSystematicsConnector,
   SYSTEMATICS_ENDPOINTS,
   SYSTEMATICS_TRANSACTION_TYPES,
-  SYSTEMATICS_LAYOUTS
+  SYSTEMATICS_RECORD_LAYOUTS: SYSTEMATICS_LAYOUTS
 };

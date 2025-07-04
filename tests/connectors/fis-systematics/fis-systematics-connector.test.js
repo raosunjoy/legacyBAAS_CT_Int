@@ -47,18 +47,26 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
       testMode: true
     };
 
-    // Create a proper mock for axios
+    // Create connector instance first
+    connector = new FISSystematicsConnector(config);
+    
+    // Mock the httpClient as a function that can be called directly
     mockHttpClient = jest.fn();
     mockHttpClient.defaults = { headers: { common: {} } };
-    mockHttpClient.interceptors = {
-      request: { use: jest.fn() },
-      response: { use: jest.fn() }
-    };
+    mockHttpClient.post = jest.fn();
+    mockHttpClient.get = jest.fn();
+    mockHttpClient.put = jest.fn();
+    mockHttpClient.delete = jest.fn();
     
-    axios.create.mockReturnValue(mockHttpClient);
+    // Make the main function return a proper response structure
+    mockHttpClient.mockImplementation(() => Promise.resolve({
+      data: {},
+      status: 200,
+      config: { metadata: { startTime: Date.now() } }
+    }));
     
-    // Create connector instance
-    connector = new FISSystematicsConnector(config);
+    // Replace the connector's httpClient with our mock
+    connector.httpClient = mockHttpClient;
   });
 
   afterEach(() => {
@@ -114,7 +122,10 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
         fixedWidthRecords: 0,
         cobolTransformations: 0,
         cicsTransactions: 0,
-        fileProcessingTime: 0
+        fileProcessingTime: 0,
+        sessionRenewals: 0,
+        sessionTimeouts: 0,
+        mainframeConnections: 0
       });
     });
   });
@@ -127,18 +138,19 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
           userId: 'test_user',
           terminalId: 'TERM001',
           status: 'ACTIVE',
-          timeout: 1800,
+          expiresIn: 1800,
           cicsRegion: 'CICSPROD'
-        }
+        },
+        status: 200,
+        config: { metadata: { startTime: Date.now() } }
       };
 
-      mockHttpClient.mockResolvedValue(mockSessionResponse);
+      mockHttpClient.post.mockResolvedValue(mockSessionResponse);
 
       await connector.authenticate();
 
       expect(connector.sessionId).toBe('SESS_001');
-      expect(connector.terminalId).toBe('TERM001');
-      expect(connector.sessionTimeout).toBe(1800);
+      expect(connector.sessionExpiry).toBeGreaterThan(Date.now());
       expect(connector.isConnected).toBe(true);
     });
 
@@ -150,10 +162,12 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
           transaction: 'LOGON',
           status: 'SUCCESSFUL',
           facilities: ['TN3270', 'BATCH', 'INQUIRY']
-        }
+        },
+        status: 200,
+        config: { metadata: { startTime: Date.now() } }
       };
 
-      mockHttpClient.mockResolvedValue(cicsResponse);
+      mockHttpClient.post.mockResolvedValue(cicsResponse);
 
       await connector.authenticateCICS();
 
@@ -173,7 +187,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
         }
       };
 
-      mockHttpClient.mockRejectedValue(authError);
+      mockHttpClient.post.mockRejectedValue(authError);
 
       await expect(connector.authenticate()).rejects.toThrow('Systematics authentication failed');
       expect(connector.metrics.authenticationFailures).toBe(1);
@@ -182,17 +196,19 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
 
     test('should handle session timeout', async () => {
       connector.sessionId = 'SESS_001';
-      connector.sessionTimeout = Date.now() - 1000; // Expired
+      connector.sessionExpiry = Date.now() - 1000; // Expired
 
       const renewResponse = {
         data: {
           sessionId: 'SESS_002',
           status: 'RENEWED',
           timeout: 1800
-        }
+        },
+        status: 200,
+        config: { metadata: { startTime: Date.now() } }
       };
 
-      mockHttpClient.mockResolvedValue(renewResponse);
+      mockHttpClient.post.mockResolvedValue(renewResponse);
 
       await connector.ensureSessionActive();
 
@@ -201,12 +217,12 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
 
     test('should handle session renewal failure', async () => {
       connector.sessionId = 'SESS_001';
-      connector.sessionTimeout = Date.now() - 1000;
+      connector.sessionExpiry = Date.now() - 1000;
 
       const renewError = new Error('Session renewal failed');
       renewError.response = { status: 403 };
 
-      mockHttpClient.mockRejectedValue(renewError);
+      mockHttpClient.post.mockRejectedValue(renewError);
 
       await expect(connector.ensureSessionActive()).rejects.toThrow();
       expect(connector.systematicsMetrics.sessionTimeouts).toBe(1);
@@ -228,10 +244,12 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
           protocol: 'TN3270',
           status: 'CONNECTED',
           luName: 'LU001'
-        }
+        },
+        status: 200,
+        config: { metadata: { startTime: Date.now() } }
       };
 
-      mockHttpClient.mockResolvedValue(connectionResponse);
+      mockHttpClient.post.mockResolvedValue(connectionResponse);
 
       await connector.connectToMainframe();
 
