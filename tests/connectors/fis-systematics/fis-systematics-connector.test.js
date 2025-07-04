@@ -1079,8 +1079,9 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
       connector.sessionId = 'SESS_001';
       connector.sessionExpiry = Date.now() + 3600000;
       connector.isConnected = true;
+      connector.mainframeConnection = { connectionId: 'CONN_001', connected: true };
       
-      mockHttpClient.mockResolvedValue({ data: { status: 'DISCONNECTED' } });
+      mockHttpClient.delete = jest.fn().mockResolvedValue({ data: { status: 'DISCONNECTED' } });
 
       await connector.cleanup();
 

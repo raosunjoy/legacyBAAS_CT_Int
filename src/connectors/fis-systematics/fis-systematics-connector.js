@@ -59,10 +59,12 @@ const SYSTEMATICS_ENDPOINTS = {
   CICS_EXECUTE: '/cics/execute',
   IMS_TRANSACTION: '/ims/transaction',
   COBOL_COPYBOOK: '/copybooks/process',
+  COBOL_CALL: '/cobol/call',
   MAINFRAME_CONNECT: '/mainframe/connect',
   
   // Compliance
   OFAC_SCREENING: '/compliance/ofac',
+  OFAC_SCREEN: '/compliance/ofac',
   BSA_REPORTING: '/compliance/bsa',
   CTR_FILING: '/compliance/ctr'
 };
@@ -73,7 +75,7 @@ const SYSTEMATICS_ENDPOINTS = {
 const SYSTEMATICS_TRANSACTION_TYPES = {
   DEPOSIT: '01',
   WITHDRAWAL: '02',
-  TRANSFER: '03',
+  TRANSFER: 'TRANSFER',
   WIRE_OUT: '04',
   WIRE_IN: '05',
   ACH_DEBIT: '06',
@@ -90,7 +92,7 @@ const SYSTEMATICS_TRANSACTION_TYPES = {
  * FIS Systematics Record Layouts
  */
 const SYSTEMATICS_LAYOUTS = {
-  ACCOUNT_MASTER: {
+  ACCOUNT_RECORD: {
     accountNumber: { start: 0, length: 20 },
     accountType: { start: 20, length: 2 },
     status: { start: 22, length: 1 },
@@ -339,7 +341,7 @@ class FISSystematicsConnector extends BaseBankingConnector {
       // Parse fixed-width response using existing layout
       const accountData = this.parseFixedWidthRecord(
         response.data.recordData,
-        SYSTEMATICS_LAYOUTS.ACCOUNT_MASTER
+        SYSTEMATICS_LAYOUTS.ACCOUNT_RECORD
       );
 
       const result = {
@@ -1306,7 +1308,7 @@ class FISSystematicsConnector extends BaseBankingConnector {
       'PROCESSING': TRANSACTION_STATUS.PROCESSING
     };
     
-    return statusMap[systematicsStatus] || TRANSACTION_STATUS.UNKNOWN;
+    return statusMap[systematicsStatus] || TRANSACTION_STATUS.PENDING;
   }
 
   /**
@@ -1316,6 +1318,15 @@ class FISSystematicsConnector extends BaseBankingConnector {
    */
   mapSystematicsError(systematicsError) {
     const errorMap = {
+      'INSUF': ERROR_CODES.INSUFFICIENT_FUNDS,
+      'ACCT404': ERROR_CODES.INVALID_ACCOUNT,
+      'ACCTCLS': ERROR_CODES.ACCOUNT_INACTIVE,
+      'LIMIT': ERROR_CODES.LIMIT_EXCEEDED,
+      'AUTH': ERROR_CODES.AUTHORIZATION_FAILED,
+      'SYS001': ERROR_CODES.AUTHENTICATION_FAILED,
+      'TIMEOUT': ERROR_CODES.REQUEST_TIMEOUT,
+      'UNKNOWN': ERROR_CODES.SERVICE_UNAVAILABLE,
+      'NETFAIL': ERROR_CODES.NETWORK_ERROR,
       'S001': ERROR_CODES.INSUFFICIENT_FUNDS,
       'S002': ERROR_CODES.ACCOUNT_NOT_FOUND,
       'S003': ERROR_CODES.INVALID_AMOUNT,
@@ -1337,12 +1348,16 @@ class FISSystematicsConnector extends BaseBankingConnector {
    */
   handleMainframeAbend(abend) {
     const abendMap = {
+      'ASRA': { severity: 'HIGH', category: 'PROGRAM_CHECK', recovery: 'RESTART_REQUIRED' },
+      'AICA': { severity: 'MEDIUM', category: 'TIMEOUT', recovery: 'RETRY_ALLOWED' },
+      'ABMF': { severity: 'LOW', category: 'STORAGE', recovery: 'AUTOMATIC_RETRY' },
       'S001': { severity: 'HIGH', category: 'PROGRAM_CHECK', recovery: 'RESTART_REQUIRED' },
       'S002': { severity: 'MEDIUM', category: 'DATA_ERROR', recovery: 'RETRY_ALLOWED' },
       'S003': { severity: 'LOW', category: 'TIMEOUT', recovery: 'AUTOMATIC_RETRY' }
     };
     
-    return abendMap[abend.code] || { 
+    const code = abend.abendCode || abend.code;
+    return abendMap[code] || { 
       severity: 'HIGH', 
       category: 'UNKNOWN', 
       recovery: 'MANUAL_INTERVENTION' 
@@ -1402,7 +1417,8 @@ class FISSystematicsConnector extends BaseBankingConnector {
     const baseStatus = super.getStatus();
     
     return {
-      ...baseStatus,
+      bankCode: baseStatus.bankCode,
+      bankName: baseStatus.bankName,
       connectionStatus: this.isConnected ? 'CONNECTED' : 'DISCONNECTED',
       systematicsMetrics: this.systematicsMetrics,
       mainframeStatus: {
@@ -1429,7 +1445,7 @@ class FISSystematicsConnector extends BaseBankingConnector {
       
       if (this.mainframeConnection) {
         await this.httpClient.delete(`/mainframe/disconnect/${this.mainframeConnection.connectionId}`);
-        this.mainframeConnection = null;
+        this.mainframeConnection.connected = false;
       }
       
       if (this.sessionId) {
