@@ -594,6 +594,9 @@ describe('ISO 20022 SwiftParser Verification', () => {
 
   describe('ISO 20022 Metrics and Monitoring', () => {
     test('should collect comprehensive parsing metrics', async () => {
+      // Reset metrics to start fresh for this test
+      swiftParser.resetMetrics();
+      
       await swiftParser.parseISO20022(iso20022TestMessages.pain001.xml);
       await swiftParser.parseISO20022(iso20022TestMessages.pacs008.xml);
       await swiftParser.parseISO20022(iso20022TestMessages.camt053.xml);
