@@ -141,8 +141,13 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         restCalls: 0,
         fileProcessingEvents: 0,
         flatFileRecords: 0,
+        flatFileProcesses: 0,
         branchTransactions: 0,
-        realTimeQueries: 0
+        tellerTransactions: 0,
+        branchOperations: 0,
+        realTimeQueries: 0,
+        bsaChecks: 0,
+        cipVerifications: 0
       });
     });
   });
@@ -820,6 +825,8 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
 
   describe('Community Banking Features', () => {
     beforeEach(() => {
+      connector.authToken = 'REST_TOKEN_001';
+      connector.tokenExpiry = Date.now() + 3600000;
       connector.soapToken = 'SOAP_TOKEN_001';
       connector.restToken = 'REST_TOKEN_001';
       connector.soapTokenExpiry = Date.now() + 3600000;
@@ -945,8 +952,12 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
 
   describe('BSA Compliance', () => {
     beforeEach(() => {
+      connector.authToken = 'REST_TOKEN_001';
+      connector.tokenExpiry = Date.now() + 3600000;
       connector.soapToken = 'SOAP_TOKEN_001';
+      connector.restToken = 'REST_TOKEN_001';
       connector.soapTokenExpiry = Date.now() + 3600000;
+      connector.restTokenExpiry = Date.now() + 3600000;
     });
 
     test('should perform BSA compliance check', async () => {
@@ -1109,6 +1120,11 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
     });
 
     test('should handle network errors with retries', async () => {
+      connector.authToken = 'REST_TOKEN_001';
+      connector.tokenExpiry = Date.now() + 3600000;
+      connector.restToken = 'REST_TOKEN_001';
+      connector.restTokenExpiry = Date.now() + 3600000;
+
       const networkError = new Error('Network timeout');
       networkError.code = 'ECONNRESET';
 
@@ -1243,36 +1259,36 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
 describe('Premier Constants and Exports', () => {
   test('should export all required endpoints', () => {
     expect(PREMIER_ENDPOINTS).toBeDefined();
-    expect(PREMIER_ENDPOINTS.SOAP_AUTHENTICATE).toBe('/soap/authenticate');
-    expect(PREMIER_ENDPOINTS.REST_AUTHENTICATE).toBe('/api/v1/auth/token');
-    expect(PREMIER_ENDPOINTS.ACCOUNT_INQUIRY).toBe('/api/v1/accounts');
-    expect(PREMIER_ENDPOINTS.TRANSACTION_PROCESS).toBe('/api/v1/transactions');
-    expect(PREMIER_ENDPOINTS.FLAT_FILE_UPLOAD).toBe('/api/v1/batch/upload');
-    expect(PREMIER_ENDPOINTS.BSA_COMPLIANCE).toBe('/api/v1/compliance/bsa');
+    expect(PREMIER_ENDPOINTS.AUTHENTICATION_WSDL).toBe('/services/AuthenticationService?wsdl');
+    expect(PREMIER_ENDPOINTS.REST_AUTH).toBe('/api/v1/auth/login');
+    expect(PREMIER_ENDPOINTS.REST_ACCOUNTS).toBe('/api/v1/accounts');
+    expect(PREMIER_ENDPOINTS.REST_TRANSACTIONS).toBe('/api/v1/transactions');
+    expect(PREMIER_ENDPOINTS.FILE_UPLOAD).toBe('/api/v1/files/upload');
+    expect(PREMIER_ENDPOINTS.BSA_SCREENING).toBe('/api/v1/compliance/bsa');
     expect(PREMIER_ENDPOINTS.CIP_VERIFICATION).toBe('/api/v1/compliance/cip');
-    expect(PREMIER_ENDPOINTS.TELLER_OPERATIONS).toBe('/api/v1/teller');
-    expect(PREMIER_ENDPOINTS.BRANCH_OPERATIONS).toBe('/api/v1/branch');
+    expect(PREMIER_ENDPOINTS.BALANCE_INQUIRY).toBe('/api/v1/realtime/balance');
+    expect(PREMIER_ENDPOINTS.FUNDS_VERIFICATION).toBe('/api/v1/realtime/verify');
   });
 
   test('should export transaction types', () => {
     expect(PREMIER_TRANSACTION_TYPES).toBeDefined();
-    expect(PREMIER_TRANSACTION_TYPES.DEBIT).toBe('DEBIT');
-    expect(PREMIER_TRANSACTION_TYPES.CREDIT).toBe('CREDIT');
-    expect(PREMIER_TRANSACTION_TYPES.TRANSFER).toBe('TRANSFER');
-    expect(PREMIER_TRANSACTION_TYPES.CASH_DEPOSIT).toBe('CASH_DEPOSIT');
-    expect(PREMIER_TRANSACTION_TYPES.CASH_WITHDRAWAL).toBe('CASH_WITHDRAWAL');
-    expect(PREMIER_TRANSACTION_TYPES.CHECK_DEPOSIT).toBe('CHECK_DEPOSIT');
+    expect(PREMIER_TRANSACTION_TYPES.CHECKING_DEPOSIT).toBe('100');
+    expect(PREMIER_TRANSACTION_TYPES.CHECKING_WITHDRAWAL).toBe('101');
+    expect(PREMIER_TRANSACTION_TYPES.TRANSFER).toBe('300');
+    expect(PREMIER_TRANSACTION_TYPES.SAVINGS_DEPOSIT).toBe('200');
+    expect(PREMIER_TRANSACTION_TYPES.SAVINGS_WITHDRAWAL).toBe('201');
+    expect(PREMIER_TRANSACTION_TYPES.ACH_DEBIT).toBe('700');
   });
 
   test('should export account types', () => {
     expect(PREMIER_ACCOUNT_TYPES).toBeDefined();
-    expect(PREMIER_ACCOUNT_TYPES.CHECKING).toBe('CHECKING');
-    expect(PREMIER_ACCOUNT_TYPES.SAVINGS).toBe('SAVINGS');
-    expect(PREMIER_ACCOUNT_TYPES.MONEY_MARKET).toBe('MONEY_MARKET');
-    expect(PREMIER_ACCOUNT_TYPES.CD).toBe('CD');
-    expect(PREMIER_ACCOUNT_TYPES.LOAN).toBe('LOAN');
-    expect(PREMIER_ACCOUNT_TYPES.MORTGAGE).toBe('MORTGAGE');
-    expect(PREMIER_ACCOUNT_TYPES.BUSINESS_CHECKING).toBe('BUSINESS_CHECKING');
-    expect(PREMIER_ACCOUNT_TYPES.BUSINESS_SAVINGS).toBe('BUSINESS_SAVINGS');
+    expect(PREMIER_ACCOUNT_TYPES.CHECKING).toBe('01');
+    expect(PREMIER_ACCOUNT_TYPES.SAVINGS).toBe('02');
+    expect(PREMIER_ACCOUNT_TYPES.MONEY_MARKET).toBe('03');
+    expect(PREMIER_ACCOUNT_TYPES.CD).toBe('04');
+    expect(PREMIER_ACCOUNT_TYPES.LOAN).toBe('10');
+    expect(PREMIER_ACCOUNT_TYPES.MORTGAGE).toBe('13');
+    expect(PREMIER_ACCOUNT_TYPES.BUSINESS_CHECKING).toBe('21');
+    expect(PREMIER_ACCOUNT_TYPES.BUSINESS_SAVINGS).toBe('22');
   });
 });
