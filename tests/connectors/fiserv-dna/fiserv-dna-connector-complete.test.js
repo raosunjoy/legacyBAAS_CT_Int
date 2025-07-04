@@ -1141,6 +1141,9 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
     });
 
     test('should cache compliance results', async () => {
+      // Set compliance threshold to 0 so that the compliance check is always performed
+      connector.dnaConfig.complianceThreshold = 0;
+      
       const transaction = {
         id: 'TXN_COMP_003',
         amount: 5000.00

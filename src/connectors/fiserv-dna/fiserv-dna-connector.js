@@ -579,6 +579,29 @@ class FiservDNAConnector extends BaseBankingConnector {
    */
   async performComplianceCheck(transaction) {
     try {
+      // Check if compliance threshold is configured and amount is below it
+      const threshold = this.dnaConfig.complianceThreshold !== undefined ? this.dnaConfig.complianceThreshold : 10000;
+      if (transaction.amount < threshold) {
+        return {
+          passed: true,
+          riskScore: 0,
+          flags: [],
+          recommendations: [],
+          bypassed: true,
+          reason: 'Amount below compliance threshold'
+        };
+      }
+
+      // Check cache first
+      const cacheKey = `compliance:${transaction.id || 'unknown'}:${transaction.amount}`;
+      if (this.dnaConfig.enableCaching && this.complianceCache.has(cacheKey)) {
+        const cached = this.complianceCache.get(cacheKey);
+        if (Date.now() - cached.timestamp < this.dnaConfig.cacheExpiry) {
+          this.dnaMetrics.cacheHits = (this.dnaMetrics.cacheHits || 0) + 1;
+          return cached.data;
+        }
+      }
+
       this.dnaMetrics.complianceChecks++;
 
       const complianceRequest = {
@@ -593,12 +616,24 @@ class FiservDNAConnector extends BaseBankingConnector {
 
       const response = await this.makeApiCall('POST', DNA_ENDPOINTS.AML_SCREENING, complianceRequest);
 
-      return {
+      const result = {
         passed: response.data.status === 'PASSED',
         riskScore: response.data.riskScore,
         flags: response.data.flags || [],
-        recommendations: response.data.recommendations || []
+        recommendations: response.data.recommendations || [],
+        screeningResults: response.data.screeningResults || {}
       };
+
+      // Cache the result
+      if (this.dnaConfig.enableCaching) {
+        this.complianceCache.set(cacheKey, {
+          data: result,
+          timestamp: Date.now()
+        });
+      }
+
+      this.dnaMetrics.cacheMisses = (this.dnaMetrics.cacheMisses || 0) + 1;
+      return result;
 
     } catch (error) {
       logger.error('DNA compliance check failed', {
@@ -662,6 +697,7 @@ class FiservDNAConnector extends BaseBankingConnector {
 
     try {
       this.dnaMetrics.apiCalls++;
+      const startTime = Date.now();
       
       const config = {
         method: method.toLowerCase(),
@@ -669,7 +705,8 @@ class FiservDNAConnector extends BaseBankingConnector {
         headers: {
           'X-Request-ID': uuidv4(),
           'X-Timestamp': new Date().toISOString()
-        }
+        },
+        metadata: { startTime }
       };
 
       if (method.toUpperCase() === 'GET') {
@@ -680,14 +717,14 @@ class FiservDNAConnector extends BaseBankingConnector {
 
       const response = await this.httpClient(config);
       
-      this.updateMetrics('success', response.config.metadata?.startTime);
+      this.updateMetrics('success', startTime);
       return response;
 
     } catch (error) {
       this.updateMetrics('failure');
       
       // Enhanced error handling for DNA-specific errors
-      if (error.response) {
+      if (error.response && error.response.data) {
         const dnaError = this.mapDNAError(error.response.data);
         throw new Error(dnaError.message);
       }
@@ -747,7 +784,7 @@ class FiservDNAConnector extends BaseBankingConnector {
    * @param {Object} dnaError 
    * @returns {Object}
    */
-  mapDNAError(dnaError) {
+  mapDNAError(dnaError = {}) {
     const errorMap = {
       'INSUFFICIENT_FUNDS': ERROR_CODES.INSUFFICIENT_FUNDS,
       'INVALID_ACCOUNT': ERROR_CODES.INVALID_ACCOUNT,
@@ -763,6 +800,16 @@ class FiservDNAConnector extends BaseBankingConnector {
     };
   }
 
+  /**
+   * Ensure authentication token is valid
+   * @returns {Promise<void>}
+   */
+  async ensureAuthenticated() {
+    if (!this.accessToken || Date.now() >= this.tokenExpiry - 60000) {
+      await this.authenticate();
+    }
+  }
+
 
   /**
    * Register webhook
@@ -773,26 +820,32 @@ class FiservDNAConnector extends BaseBankingConnector {
    */
   async registerWebhook(eventType, url, handler) {
     try {
-      await this.ensureAuthenticated();
-
       const webhookRequest = {
         eventType,
         callbackUrl: url,
+        secret: this.dnaConfig.webhookSecret,
         active: true
       };
 
-      const response = await this.makeRequest('POST', DNA_ENDPOINTS.WEBHOOKS, webhookRequest);
+      const response = await this.makeApiCall('POST', DNA_ENDPOINTS.NOTIFICATION_WEBHOOK, webhookRequest);
       
       const webhookId = response.data.webhookId;
       if (handler) {
         this.webhookHandlers.set(webhookId, handler);
       }
 
+      this.webhookHandlers.set(eventType, {
+        id: webhookId,
+        callbackUrl: url,
+        secret: this.dnaConfig.webhookSecret
+      });
+
       return {
         webhookId,
         eventType,
-        url,
-        active: true
+        callbackUrl: url,
+        active: true,
+        createdAt: response.data.createdAt
       };
 
     } catch (error) {
@@ -808,13 +861,13 @@ class FiservDNAConnector extends BaseBankingConnector {
   /**
    * Unregister webhook
    * @param {string} webhookId 
-   * @returns {Promise<void>}
+   * @returns {Promise<Object>}
    */
   async unregisterWebhook(webhookId) {
     try {
-      await this.ensureAuthenticated();
-      await this.makeRequest('DELETE', `${DNA_ENDPOINTS.WEBHOOKS}/${webhookId}`);
+      const response = await this.makeApiCall('DELETE', `${DNA_ENDPOINTS.WEBHOOKS}/${webhookId}`);
       this.webhookHandlers.delete(webhookId);
+      return response.data;
     } catch (error) {
       logger.error('DNA webhook unregistration failed', {
         webhookId,
@@ -830,8 +883,7 @@ class FiservDNAConnector extends BaseBankingConnector {
    */
   async listWebhooks() {
     try {
-      await this.ensureAuthenticated();
-      const response = await this.makeRequest('GET', DNA_ENDPOINTS.WEBHOOKS);
+      const response = await this.makeApiCall('GET', DNA_ENDPOINTS.WEBHOOKS);
       return response.data.webhooks || [];
     } catch (error) {
       logger.error('DNA webhook listing failed', { error: error.message });
@@ -846,14 +898,29 @@ class FiservDNAConnector extends BaseBankingConnector {
    */
   async processWebhookEvent(event) {
     try {
-      const handler = this.webhookHandlers.get(event.webhookId);
+      // Try to find handler by eventType first, then by webhookId
+      let handler = this.webhookHandlers.get(event.eventType) || this.webhookHandlers.get(event.webhookId);
+      
       if (handler) {
-        await handler(event);
+        // If the handler is actually an object (from registerWebhook), get the function
+        if (typeof handler === 'object' && typeof handler.handler === 'function') {
+          handler = handler.handler;
+        }
+        
+        // Call handler with event data
+        await handler(event.data || event);
+        
+        // Only increment metrics if handler was found and called
+        this.dnaMetrics.webhookEvents = (this.dnaMetrics.webhookEvents || 0) + 1;
       } else {
-        logger.warn('No handler registered for webhook', { webhookId: event.webhookId });
+        logger.warn('No handler registered for webhook', { 
+          eventType: event.eventType,
+          webhookId: event.webhookId 
+        });
       }
     } catch (error) {
       logger.error('Webhook event processing failed', {
+        eventType: event.eventType,
         webhookId: event.webhookId,
         error: error.message
       });
@@ -944,8 +1011,6 @@ class FiservDNAConnector extends BaseBankingConnector {
    */
   async processBatchOperations(operations) {
     try {
-      await this.ensureAuthenticated();
-
       const batchRequest = {
         operations: operations.map(op => ({
           type: op.type,
@@ -955,7 +1020,7 @@ class FiservDNAConnector extends BaseBankingConnector {
         }))
       };
 
-      const response = await this.makeRequest('POST', `${DNA_ENDPOINTS.TRANSACTIONS}/batch`, batchRequest);
+      const response = await this.makeApiCall('POST', `${DNA_ENDPOINTS.TRANSACTIONS}/batch`, batchRequest);
       return response.data.results || [];
 
     } catch (error) {
@@ -986,8 +1051,6 @@ class FiservDNAConnector extends BaseBankingConnector {
    */
   async queryTransactionHistory(criteria) {
     try {
-      await this.ensureAuthenticated();
-
       const queryParams = {
         accountId: criteria.accountId,
         startDate: criteria.startDate,
@@ -996,7 +1059,7 @@ class FiservDNAConnector extends BaseBankingConnector {
         offset: criteria.offset || 0
       };
 
-      const response = await this.makeRequest('GET', `${DNA_ENDPOINTS.TRANSACTIONS}/history`, { params: queryParams });
+      const response = await this.makeApiCall('GET', `${DNA_ENDPOINTS.TRANSACTIONS}/history`, { params: queryParams });
       return response.data.transactions || [];
 
     } catch (error) {
@@ -1011,7 +1074,7 @@ class FiservDNAConnector extends BaseBankingConnector {
    */
   async getHealthStatus() {
     try {
-      const response = await this.makeRequest('GET', DNA_ENDPOINTS.HEALTH);
+      const response = await this.makeApiCall('GET', DNA_ENDPOINTS.HEALTH);
       return {
         healthy: response.data.status === 'UP',
         services: response.data.services || {},
