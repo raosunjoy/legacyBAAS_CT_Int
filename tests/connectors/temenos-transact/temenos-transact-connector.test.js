@@ -511,6 +511,12 @@ describe('TemenosTransactConnector - Complete Test Suite', () => {
     });
 
     test('should provide health status', async () => {
+      // Set up authentication
+      connector.accessToken = 'TRANSACT_TOKEN_001';
+      connector.sessionToken = 'SESSION_TOKEN_001';
+      connector.tokenExpiry = Date.now() + 3600000;
+      connector.isAuthenticated = true;
+
       const healthResponse = {
         data: { 
           status: 'healthy', 
