@@ -355,7 +355,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
       // Build fixed-width record: accountNumber(20) + accountType(2) + status(1) + openDate(8) + balance(15) + availableBalance(15) + customerId(15) + productCode(10) + interestRate(8) + lastUpdateDate(8)
       const fixedWidthRecord = '1234567890          01A20231201000000100000000000009000000000123456789000   TEST_PROD 0005000020240101';
       
-      const parsed = connector.parseFixedWidthRecord(fixedWidthRecord, SYSTEMATICS_RECORD_LAYOUTS.ACCOUNT_MASTER);
+      const parsed = connector.parseFixedWidthRecord(fixedWidthRecord, SYSTEMATICS_RECORD_LAYOUTS.ACCOUNT_RECORD);
 
       expect(parsed).toEqual({
         accountNumber: '1234567890          ',
@@ -415,7 +415,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
         lastUpdateDate: '20240101'
       };
 
-      const formatted = connector.formatFixedWidthRecord(data, SYSTEMATICS_RECORD_LAYOUTS.ACCOUNT_MASTER);
+      const formatted = connector.formatFixedWidthRecord(data, SYSTEMATICS_RECORD_LAYOUTS.ACCOUNT_RECORD);
 
       expect(formatted).toHaveLength(102); // Total length based on layout
       expect(formatted.substring(0, 20)).toBe('1234567890          ');

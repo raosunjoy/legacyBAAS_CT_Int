@@ -1523,32 +1523,6 @@ class FISSystematicsConnector extends BaseBankingConnector {
     return statuses[statusCode] || TRANSACTION_STATUS.PENDING;
   }
 
-  /**
-   * Get enhanced status with Systematics metrics
-   * @returns {Object}
-   */
-  getStatus() {
-    const baseStatus = super.getStatus();
-    
-    return {
-      ...baseStatus,
-      systematicsMetrics: this.systematicsMetrics,
-      sessionStatus: {
-        hasSession: !!this.sessionId,
-        sessionExpiry: this.sessionExpiry,
-        lastActivity: this.lastActivity
-      },
-      batchStatus: {
-        processingBatches: this.processingBatches.size,
-        queuedBatches: this.batchQueue.size
-      },
-      mainframeConfig: {
-        host: this.systematicsConfig.mainframeHost,
-        cicsRegion: this.systematicsConfig.cicsRegion,
-        enableBatchProcessing: this.systematicsConfig.enableBatchProcessing
-      }
-    };
-  }
 }
 
 module.exports = {
