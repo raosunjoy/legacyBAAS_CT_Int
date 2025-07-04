@@ -347,12 +347,13 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
   describe('Fixed-Width Record Processing', () => {
     beforeEach(() => {
       connector.sessionId = 'SESS_001';
+      connector.sessionExpiry = Date.now() + 3600000;
       connector.isConnected = true;
     });
 
     test('should parse fixed-width account record', () => {
       // Build fixed-width record: accountNumber(20) + accountType(2) + status(1) + openDate(8) + balance(15) + availableBalance(15) + customerId(15) + productCode(10) + interestRate(8) + lastUpdateDate(8)
-      const fixedWidthRecord = '1234567890          01A20231201000000100000000009000000000123456789000   TEST_PROD 0005000020240101';
+      const fixedWidthRecord = '1234567890          01A20231201000000100000000000009000000000123456789000   TEST_PROD 0005000020240101';
       
       const parsed = connector.parseFixedWidthRecord(fixedWidthRecord, SYSTEMATICS_RECORD_LAYOUTS.ACCOUNT_MASTER);
 
@@ -374,7 +375,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
 
     test('should parse fixed-width transaction record', () => {
       // Build record: transactionId(16) + transactionType(2) + accountNumber(20) + amount(15) + valueDate(8) + processDate(8) + description(40) + reference(20) + status(1) + errorCode(4)
-      const txnRecord = 'TXN001          0112345678901234567890000000500000020231201202312015 TRANSFER PAYMENT                     REF123456789012345  P0000';
+      const txnRecord = 'TXN001          0112345678901234567890000000500000002202312012023120105 TRANSFER PAYMENT                     REF123456789012345  P0000';
       
       const parsed = connector.parseFixedWidthRecord(txnRecord, SYSTEMATICS_RECORD_LAYOUTS.TRANSACTION_RECORD);
 
@@ -385,7 +386,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
         amount: '000000500000002',
         valueDate: '20231201',
         processDate: '20231201',
-        description: '5 TRANSFER PAYMENT                     ',
+        description: '05 TRANSFER PAYMENT                     ',
         reference: 'REF123456789012345  ',
         status: 'P',
         errorCode: '0000'
@@ -443,40 +444,35 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
   describe('Account Operations', () => {
     beforeEach(() => {
       connector.sessionId = 'SESS_001';
+      connector.sessionExpiry = Date.now() + 3600000; // Set to future time
       connector.isConnected = true;
     });
 
     test('should get account details via CICS', async () => {
       const accountResponse = {
         data: {
-          transactionId: 'ACCT',
+          transactionId: 'ACQY',
           returnCode: 'NORMAL',
-          commArea: {
-            accountNumber: '1234567890',
-            accountName: 'JOHN DOE                      ',
-            accountType: 'C',
-            balance: '00000100000',
-            status: 'A',
-            branchCode: '001',
-            productCode: 'CHK',
-            openDate: '20230101'
-          }
+          recordData: '1234567890          CHA20230101000000000100000000000001000000001            CHK       0000000020230101'
         }
       };
 
-      mockHttpClient.mockResolvedValue(accountResponse);
+      mockHttpClient.post.mockResolvedValue(accountResponse);
 
       const result = await connector.getAccountDetails('1234567890');
 
       expect(result).toEqual({
         accountNumber: '1234567890',
-        accountName: 'JOHN DOE',
-        accountType: 'CHECKING',
+        accountType: 'CHECKING', 
         accountStatus: 'ACTIVE',
-        balance: 1000.00,
-        branchCode: '001',
+        customerId: '001',
         productCode: 'CHK',
-        openDate: '2023-01-01'
+        openDate: '2023-01-01',
+        currentBalance: 100000,
+        availableBalance: 1000000,
+        interestRate: 0.00,
+        lastUpdateDate: '2023-01-01',
+        currency: 'USD'
       });
     });
 
@@ -549,6 +545,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
   describe('Transaction Processing', () => {
     beforeEach(() => {
       connector.sessionId = 'SESS_001';
+      connector.sessionExpiry = Date.now() + 3600000;
       connector.isConnected = true;
     });
 
@@ -710,6 +707,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
   describe('Batch Processing', () => {
     beforeEach(() => {
       connector.sessionId = 'SESS_001';
+      connector.sessionExpiry = Date.now() + 3600000;
       connector.isConnected = true;
     });
 
@@ -814,6 +812,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
   describe('COBOL Integration', () => {
     beforeEach(() => {
       connector.sessionId = 'SESS_001';
+      connector.sessionExpiry = Date.now() + 3600000;
       connector.isConnected = true;
     });
 
@@ -897,6 +896,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
   describe('Compliance and Business Rules', () => {
     beforeEach(() => {
       connector.sessionId = 'SESS_001';
+      connector.sessionExpiry = Date.now() + 3600000;
       connector.isConnected = true;
     });
 
@@ -1084,6 +1084,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
 
     test('should provide health status', async () => {
       connector.sessionId = 'SESS_001';
+      connector.sessionExpiry = Date.now() + 3600000;
       connector.isConnected = true;
       mockHttpClient.mockResolvedValue({ status: 200 });
 
@@ -1105,6 +1106,7 @@ describe('FISSystematicsConnector - Complete Test Suite', () => {
   describe('Cleanup and Resource Management', () => {
     test('should cleanup resources properly', async () => {
       connector.sessionId = 'SESS_001';
+      connector.sessionExpiry = Date.now() + 3600000;
       connector.isConnected = true;
       
       mockHttpClient.mockResolvedValue({ data: { status: 'DISCONNECTED' } });

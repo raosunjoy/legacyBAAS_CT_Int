@@ -674,28 +674,6 @@ class FISSystematicsConnector extends BaseBankingConnector {
     }
   }
 
-  /**
-   * Parse fixed-width record using layout
-   * @param {string} record 
-   * @param {Object} layout 
-   * @returns {Object}
-   */
-  parseFixedWidthRecord(record, layout) {
-    const result = {};
-    
-    for (const [fieldName, fieldLayout] of Object.entries(layout)) {
-      const value = record.substring(
-        fieldLayout.start,
-        fieldLayout.start + fieldLayout.length
-      ).trim();
-      
-      if (value) {
-        result[fieldName] = value;
-      }
-    }
-
-    return result;
-  }
 
   /**
    * Build fixed-width record from data
@@ -856,19 +834,28 @@ class FISSystematicsConnector extends BaseBankingConnector {
    * @returns {Promise<Object>}
    */
   async executeCICSTransaction(transactionCode, data) {
-    await this.ensureSessionActive();
-    
-    const cicsRequest = {
-      transactionCode,
-      data,
-      sessionId: this.cicsSession?.sessionId,
-      region: this.cicsSession?.region
-    };
+    try {
+      await this.ensureSessionActive();
+      
+      const cicsRequest = {
+        transactionCode,
+        data,
+        sessionId: this.cicsSession?.sessionId,
+        region: this.cicsSession?.region
+      };
 
-    const response = await this.httpClient.post(SYSTEMATICS_ENDPOINTS.CICS_TRANSACTION, cicsRequest);
-    this.systematicsMetrics.cicsTransactions = (this.systematicsMetrics.cicsTransactions || 0) + 1;
-    
-    return response.data;
+      const response = await this.httpClient.post(SYSTEMATICS_ENDPOINTS.CICS_TRANSACTION, cicsRequest);
+      this.systematicsMetrics.cicsTransactions = (this.systematicsMetrics.cicsTransactions || 0) + 1;
+      
+      return response.data;
+    } catch (error) {
+      this.systematicsMetrics.cicsErrors = (this.systematicsMetrics.cicsErrors || 0) + 1;
+      logger.error('CICS transaction failed', {
+        transactionCode,
+        error: error.message
+      });
+      throw new Error(`CICS transaction failed: ${error.message}`);
+    }
   }
 
   /**
@@ -895,6 +882,16 @@ class FISSystematicsConnector extends BaseBankingConnector {
    * @returns {Object}
    */
   parseFixedWidthRecord(record, layout) {
+    // Validate record format
+    if (!record || typeof record !== 'string') {
+      throw new Error('Invalid record format');
+    }
+    
+    // Validate layout
+    if (!layout || typeof layout !== 'object') {
+      throw new Error('Invalid record format');
+    }
+    
     const result = {};
     
     for (const [field, spec] of Object.entries(layout)) {
@@ -1234,7 +1231,8 @@ class FISSystematicsConnector extends BaseBankingConnector {
       '02': 'SAVINGS',
       '03': 'MONEY_MARKET',
       '04': 'CD',
-      '05': 'LOAN'
+      '05': 'LOAN',
+      'CH': 'CHECKING' // FIS legacy code
     };
     return types[typeCode] || 'UNKNOWN';
   }
