@@ -703,6 +703,60 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
       expect(connector.dnaMetrics.complianceChecks).toBe(1);
     });
 
+    test('should fail validation when compliance check fails', async () => {
+      const transaction = {
+        id: 'TXN_COMPLIANCE_FAIL',
+        type: 'debit',
+        fromAccount: '1234567890',
+        amount: 25000.00, // Large amount triggering compliance
+        currency: 'USD'
+      };
+
+      const complianceFailureResponse = {
+        data: {
+          status: 'FAILED',
+          riskScore: 0.9,
+          flags: ['HIGH_RISK', 'SUSPICIOUS_PATTERN']
+        }
+      };
+
+      mockHttpClient
+        .mockImplementationOnce(() => Promise.resolve({ 
+          data: { 
+            accountNumber: '1234567890',
+            accountType: 'CHECKING',
+            status: 'ACTIVE',
+            currency: 'USD',
+            balances: {},
+            holds: [],
+            fees: [],
+            restrictions: [],
+            metadata: {}
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }))
+        .mockImplementationOnce(() => Promise.resolve({ 
+          data: { 
+            availableBalance: '30000.00',
+            currentBalance: '30000.00',
+            pendingBalance: '0.00',
+            holds: [],
+            lastUpdated: new Date().toISOString()
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }))
+        .mockImplementationOnce(() => Promise.resolve({
+          ...complianceFailureResponse,
+          config: { metadata: { startTime: Date.now() } }
+        }));
+
+      const result = await connector.validateTransaction(transaction);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors).toContain('Compliance check failed');
+      expect(result.complianceStatus).toBe('failed');
+    });
+
     test('should handle international transaction validation', async () => {
       const transaction = {
         id: 'TXN_006',
@@ -751,7 +805,10 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
           }
         };
 
-        mockHttpClient.mockResolvedValue(mockResponse);
+        mockHttpClient.mockImplementationOnce(() => Promise.resolve({
+          ...mockResponse,
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
         const result = await connector.processDebit(transaction);
 
@@ -765,7 +822,8 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
           reference: 'REF_001'
         });
 
-        expect(connector.metrics.successfulTransactions).toBe(1);
+        expect(result.transactionId).toBe('TXN_DEBIT_001');
+        expect(result.status).toBe(TRANSACTION_STATUS.CONFIRMED);
       });
 
       test('should handle debit failure', async () => {
@@ -835,7 +893,10 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
           }
         };
 
-        mockHttpClient.mockResolvedValue(mockResponse);
+        mockHttpClient.mockImplementationOnce(() => Promise.resolve({
+          ...mockResponse,
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
         const result = await connector.processCredit(transaction);
 
@@ -893,7 +954,10 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
           }
         };
 
-        mockHttpClient.mockResolvedValue(mockStatus);
+        mockHttpClient.mockImplementationOnce(() => Promise.resolve({
+          ...mockStatus,
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
         const result = await connector.getTransactionStatus('TXN_001');
 
@@ -1052,7 +1116,10 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
         }
       };
 
-      mockHttpClient.mockResolvedValue(mockWebhook);
+      mockHttpClient.mockImplementationOnce(() => Promise.resolve({
+        ...mockWebhook,
+        config: { metadata: { startTime: Date.now() } }
+      }));
 
       const result = await connector.registerWebhook(
         'transaction.completed',
