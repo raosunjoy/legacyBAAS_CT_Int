@@ -42,18 +42,26 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
       testMode: true
     };
 
-    // Create a proper mock for axios
+    // Create connector instance first
+    connector = new FiservPremierConnector(config);
+    
+    // Mock the httpClient as a function that can be called directly
     mockHttpClient = jest.fn();
     mockHttpClient.defaults = { headers: { common: {} } };
-    mockHttpClient.interceptors = {
-      request: { use: jest.fn() },
-      response: { use: jest.fn() }
-    };
+    mockHttpClient.post = jest.fn();
+    mockHttpClient.get = jest.fn();
+    mockHttpClient.put = jest.fn();
+    mockHttpClient.delete = jest.fn();
     
-    axios.create.mockReturnValue(mockHttpClient);
+    // Make the main function return a proper response structure
+    mockHttpClient.mockImplementation(() => Promise.resolve({
+      data: {},
+      status: 200,
+      config: { metadata: { startTime: Date.now() } }
+    }));
     
-    // Create connector instance
-    connector = new FiservPremierConnector(config);
+    // Replace the connector's httpClient with our mock
+    connector.httpClient = mockHttpClient;
   });
 
   afterEach(() => {
@@ -133,7 +141,7 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         `
       };
 
-      mockHttpClient.mockResolvedValue(mockSoapResponse);
+      mockHttpClient.post.mockResolvedValue(mockSoapResponse);
 
       await connector.authenticateSOAP();
 
@@ -152,7 +160,7 @@ describe('FiservPremierConnector - Complete Test Suite', () => {
         }
       };
 
-      mockHttpClient.mockResolvedValue(mockRestResponse);
+      mockHttpClient.post.mockResolvedValue(mockRestResponse);
 
       await connector.authenticateREST();
 
