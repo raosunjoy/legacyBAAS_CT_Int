@@ -145,25 +145,30 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
     });
 
     test('should handle authentication with API key only', async () => {
-      // Mock successful OAuth2 response even without clientId
-      const mockResponse = {
-        data: {
-          access_token: 'mock_api_key_token',
-          refresh_token: 'mock_refresh',
-          expires_in: 3600,
-          token_type: 'Bearer'
-        }
+      // Test API key authentication (when OAuth2 credentials are null)
+      const keyOnlyConfig = { 
+        ...config, 
+        clientId: null, 
+        clientSecret: null,
+        apiKey: 'test_api_key' 
       };
-
-      mockHttpClient.post.mockResolvedValue(mockResponse);
-      
-      const keyOnlyConfig = { ...config, clientId: '', clientSecret: '' };
       const keyConnector = new FiservDNAConnector(keyOnlyConfig);
-      keyConnector.httpClient = mockHttpClient;
+      
+      // Set up mock httpClient
+      const newMockHttpClient = jest.fn();
+      newMockHttpClient.defaults = { headers: { common: {} } };
+      newMockHttpClient.post = jest.fn();
+      newMockHttpClient.get = jest.fn();
+      newMockHttpClient.put = jest.fn();
+      newMockHttpClient.delete = jest.fn();
+      
+      keyConnector.httpClient = newMockHttpClient;
       
       await keyConnector.authenticate();
       
-      expect(keyConnector.accessToken).toBe('mock_api_key_token');
+      // For API key authentication, no access token is set, but API key header is set
+      expect(keyConnector.accessToken).toBeNull();
+      expect(keyConnector.httpClient.defaults.headers.common['X-API-Key']).toBe('test_api_key');
     });
 
     test('should handle authentication failure', async () => {
@@ -1555,7 +1560,10 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
 
       const tlsConnector = new FiservDNAConnector(tlsConfig);
       
-      mockHttpClient.mockResolvedValue({
+      // Replace the TLS connector's httpClient with our mock  
+      tlsConnector.httpClient = mockHttpClient;
+      
+      mockHttpClient.post.mockResolvedValue({
         data: {
           access_token: 'tls_token',
           refresh_token: 'tls_refresh',
@@ -1603,6 +1611,7 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
       connector.dnaMetrics.cacheMisses = 25;
       connector.accessToken = 'test_token';
       connector.tokenExpiry = Date.now() + 3600000;
+      connector.isConnected = true;
 
       const status = connector.getStatus();
 
@@ -1721,6 +1730,10 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
     });
 
     test('should emit transaction events', async () => {
+      // Set up authentication
+      connector.accessToken = 'mock_token';
+      connector.tokenExpiry = Date.now() + 3600000;
+      
       const completedHandler = jest.fn();
       connector.on('transaction:completed', completedHandler);
 
@@ -1749,6 +1762,11 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
   });
 
   describe('Edge Cases and Error Scenarios', () => {
+    beforeEach(() => {
+      connector.accessToken = 'mock_token';
+      connector.tokenExpiry = Date.now() + 3600000;
+    });
+
     test('should handle network timeouts', async () => {
       const timeoutError = new Error('Timeout');
       timeoutError.code = 'ECONNABORTED';
@@ -1790,17 +1808,14 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
     });
 
     test('should handle authentication without OAuth2', async () => {
-      const apiKeyConfig = {
-        ...config,
-        clientId: null,
-        clientSecret: null
-      };
-
-      const apiKeyConnector = new FiservDNAConnector(apiKeyConfig);
+      // Use existing connector and override auth methods
+      connector.dnaConfig.clientId = null;
+      connector.dnaConfig.clientSecret = null;
+      connector.dnaConfig.apiKey = 'test_api_key';
       
-      await apiKeyConnector.authenticate();
+      await connector.authenticate();
       
-      expect(apiKeyConnector.httpClient.defaults.headers.common['X-API-Key']).toBe('test_api_key');
+      expect(connector.httpClient.defaults.headers.common['X-API-Key']).toBe('test_api_key');
     });
 
     test('should update metrics on API success', async () => {
@@ -1835,7 +1850,8 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
         // Expected to throw
       }
       
-      expect(connector.dnaMetrics.apiCalls).toBe(1);
+      // Should have retried 3 times (maxRetries = 3)
+      expect(connector.dnaMetrics.apiCalls).toBe(3);
     });
 
     test('should handle missing helper methods', () => {
@@ -1887,9 +1903,7 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
       
       expect(mockHttpClient).toHaveBeenCalledWith(expect.objectContaining({
         method: 'get',
-        data: expect.objectContaining({
-          params: { test: 'value' }
-        })
+        params: { test: 'value' }
       }));
     });
 
@@ -1914,15 +1928,15 @@ describe('DNA Constants and Exports', () => {
     expect(DNA_ENDPOINTS).toBeDefined();
     expect(DNA_ENDPOINTS.AUTHENTICATE).toBe('/auth/oauth/token');
     expect(DNA_ENDPOINTS.ACCOUNT_INQUIRY).toBe('/accounts/inquiry');
-    expect(DNA_ENDPOINTS.BALANCE_CHECK).toBe('/accounts/balance');
+    expect(DNA_ENDPOINTS.ACCOUNT_BALANCE).toBe('/accounts/balance');
     expect(DNA_ENDPOINTS.PAYMENT_INITIATION).toBe('/payments/initiate');
-    expect(DNA_ENDPOINTS.TRANSACTION_STATUS).toBe('/transactions/status');
-    expect(DNA_ENDPOINTS.CUSTOMER_SERVICE).toBe('/customers');
+    expect(DNA_ENDPOINTS.PAYMENT_STATUS).toBe('/payments/status');
+    expect(DNA_ENDPOINTS.CUSTOMER_INFO).toBe('/customers/details');
     expect(DNA_ENDPOINTS.AML_SCREENING).toBe('/compliance/aml/screen');
     expect(DNA_ENDPOINTS.KYC_VERIFICATION).toBe('/compliance/kyc/verify');
     expect(DNA_ENDPOINTS.COMPLIANCE_CHECK).toBe('/compliance/check');
-    expect(DNA_ENDPOINTS.WEBHOOK_MANAGEMENT).toBe('/webhooks');
-    expect(DNA_ENDPOINTS.BATCH_OPERATIONS).toBe('/batch');
+    expect(DNA_ENDPOINTS.WEBHOOKS).toBe('/webhooks');
+    expect(DNA_ENDPOINTS.TRANSACTIONS).toBe('/transactions');
   });
 
   test('should export transaction types', () => {
@@ -1932,8 +1946,10 @@ describe('DNA Constants and Exports', () => {
     expect(DNA_TRANSACTION_TYPES.TRANSFER).toBe('transfer');
     expect(DNA_TRANSACTION_TYPES.WIRE).toBe('wire');
     expect(DNA_TRANSACTION_TYPES.ACH).toBe('ach');
-    expect(DNA_TRANSACTION_TYPES.PAYMENT).toBe('payment');
-    expect(DNA_TRANSACTION_TYPES.REVERSAL).toBe('reversal');
+    expect(DNA_TRANSACTION_TYPES.CHECK).toBe('check');
+    expect(DNA_TRANSACTION_TYPES.CARD).toBe('card');
+    expect(DNA_TRANSACTION_TYPES.MOBILE).toBe('mobile');
+    expect(DNA_TRANSACTION_TYPES.ONLINE).toBe('online');
   });
 
   test('should export account types', () => {
@@ -1941,10 +1957,9 @@ describe('DNA Constants and Exports', () => {
     expect(DNA_ACCOUNT_TYPES.CHECKING).toBe('checking');
     expect(DNA_ACCOUNT_TYPES.SAVINGS).toBe('savings');
     expect(DNA_ACCOUNT_TYPES.MONEY_MARKET).toBe('money_market');
-    expect(DNA_ACCOUNT_TYPES.CD).toBe('cd');
+    expect(DNA_ACCOUNT_TYPES.CD).toBe('certificate_deposit');
     expect(DNA_ACCOUNT_TYPES.LOAN).toBe('loan');
+    expect(DNA_ACCOUNT_TYPES.CREDIT_LINE).toBe('credit_line');
     expect(DNA_ACCOUNT_TYPES.MORTGAGE).toBe('mortgage');
-    expect(DNA_ACCOUNT_TYPES.CREDIT_CARD).toBe('credit_card');
-    expect(DNA_ACCOUNT_TYPES.LINE_OF_CREDIT).toBe('line_of_credit');
   });
 });

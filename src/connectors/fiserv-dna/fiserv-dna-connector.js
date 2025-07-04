@@ -206,6 +206,19 @@ class FiservDNAConnector extends BaseBankingConnector {
         environment: this.dnaConfig.environment
       });
 
+      // Check if OAuth2 credentials are available
+      if ((this.dnaConfig.clientId === null || this.dnaConfig.clientId === undefined) && 
+          (this.dnaConfig.clientSecret === null || this.dnaConfig.clientSecret === undefined)) {
+        // Fall back to API key authentication
+        if (this.dnaConfig.apiKey) {
+          this.httpClient.defaults.headers.common['X-API-Key'] = this.dnaConfig.apiKey;
+          logger.info('DNA API key authentication set up');
+          return;
+        } else {
+          throw new Error('No authentication credentials provided (OAuth2 or API key)');
+        }
+      }
+
       const authData = {
         grant_type: 'client_credentials',
         client_id: this.dnaConfig.clientId,
@@ -221,6 +234,8 @@ class FiservDNAConnector extends BaseBankingConnector {
       };
 
       if (this.dnaConfig.enableMutualTLS && this.dnaConfig.certificatePath) {
+        const fs = require('fs');
+        const https = require('https');
         requestConfig.httpsAgent = new https.Agent({
           cert: fs.readFileSync(this.dnaConfig.certificatePath),
           key: fs.readFileSync(this.dnaConfig.privateKeyPath),
@@ -480,7 +495,7 @@ class FiservDNAConnector extends BaseBankingConnector {
 
       const response = await this.makeApiCall('POST', '/transactions/debit', debitRequest);
 
-      return {
+      const result = {
         transactionId: response.data.transactionId,
         status: this.mapDNAStatus(response.data.status),
         amount: response.data.amount,
@@ -490,8 +505,18 @@ class FiservDNAConnector extends BaseBankingConnector {
         reference: response.data.reference
       };
 
+      // Track metrics
+      this.metrics.transactionsProcessed = (this.metrics.transactionsProcessed || 0) + 1;
+      this.metrics.totalTransactions = (this.metrics.totalTransactions || 0) + 1;
+      this.metrics.successfulTransactions = (this.metrics.successfulTransactions || 0) + 1;
+
+      // Emit event
+      this.emit('transaction:completed', result);
+
+      return result;
+
     } catch (error) {
-      this.metrics.failedTransactions++;
+      this.metrics.failedTransactions = (this.metrics.failedTransactions || 0) + 1;
       logger.error('DNA debit processing failed', {
         transactionId: transaction.id,
         error: error.message
@@ -733,6 +758,7 @@ class FiservDNAConnector extends BaseBankingConnector {
         
         if (attempt === maxRetries || !isRetryable) {
           this.updateMetrics('failure');
+          this.metrics.apiErrors = (this.metrics.apiErrors || 0) + 1;
           
           // Enhanced error handling for DNA-specific errors
           if (error.response && error.response.data) {
@@ -757,7 +783,7 @@ class FiservDNAConnector extends BaseBankingConnector {
    */
   isRetryableError(error) {
     // Network errors, timeouts, and 5xx status codes are retryable
-    if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
+    if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND' || error.code === 'ECONNABORTED') {
       return true;
     }
     
@@ -1174,20 +1200,74 @@ class FiservDNAConnector extends BaseBankingConnector {
   }
 
   /**
+   * Get transaction history for a specific account
+   * @param {string} accountNumber 
+   * @param {Object} options 
+   * @returns {Promise<Object>}
+   */
+  async getTransactionHistory(accountNumber, options = {}) {
+    try {
+      const queryParams = {
+        accountNumber,
+        startDate: options.startDate,
+        endDate: options.endDate,
+        limit: options.limit || 100,
+        offset: options.offset || 0
+      };
+
+      const response = await this.makeApiCall('GET', DNA_ENDPOINTS.ACCOUNT_HISTORY, { params: queryParams });
+      return response.data;
+
+    } catch (error) {
+      logger.error('Account transaction history failed', { 
+        accountNumber, 
+        error: error.message 
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Get health status
    * @returns {Promise<Object>}
    */
   async getHealthStatus() {
     try {
-      const response = await this.makeApiCall('GET', DNA_ENDPOINTS.HEALTH);
+      let apiConnectionStatus = 'disconnected';
+      
+      // Test API connection
+      try {
+        const response = await this.makeApiCall('GET', DNA_ENDPOINTS.HEALTH);
+        apiConnectionStatus = response.status === 200 ? 'connected' : 'disconnected';
+      } catch (error) {
+        apiConnectionStatus = 'disconnected';
+      }
+      
+      const authenticationStatus = this.accessToken ? 'active' : 'inactive';
+      const tokenValid = this.accessToken && Date.now() < this.tokenExpiry;
+      const isHealthy = authenticationStatus === 'active' && apiConnectionStatus === 'connected' && tokenValid;
+      
       return {
-        healthy: response.data.status === 'UP',
-        services: response.data.services || {},
+        status: isHealthy ? 'healthy' : 'unhealthy',
+        details: {
+          authentication: authenticationStatus,
+          apiConnection: apiConnectionStatus,
+          tokenValid,
+          cacheStatus: 'active',
+          webhookStatus: 'active'
+        },
         timestamp: new Date().toISOString()
       };
     } catch (error) {
       return {
-        healthy: false,
+        status: 'unhealthy',
+        details: {
+          authentication: 'inactive',
+          apiConnection: 'disconnected',
+          tokenValid: false,
+          cacheStatus: 'inactive',
+          webhookStatus: 'inactive'
+        },
         error: error.message,
         timestamp: new Date().toISOString()
       };
@@ -1222,6 +1302,15 @@ class FiservDNAConnector extends BaseBankingConnector {
       const webhookIds = Array.from(this.webhookHandlers.keys());
       await Promise.all(webhookIds.map(id => this.unregisterWebhook(id).catch(() => {})));
       
+      // Clear webhook handlers
+      this.webhookHandlers.clear();
+      
+      // Clear authentication
+      this.accessToken = null;
+      this.refreshToken = null;
+      this.tokenExpiry = null;
+      this.isConnected = false;
+      
       // Clear timers and intervals
       this.requestTimes = [];
       
@@ -1240,8 +1329,15 @@ class FiservDNAConnector extends BaseBankingConnector {
   getStatus() {
     const baseStatus = super.getStatus();
     
+    // Calculate cache hit ratio
+    const cacheHits = this.dnaMetrics.cacheHits || 0;
+    const cacheMisses = this.dnaMetrics.cacheMisses || 0;
+    const totalCacheRequests = cacheHits + cacheMisses;
+    const cacheHitRatio = totalCacheRequests > 0 ? cacheHits / totalCacheRequests : 0;
+    
     return {
       ...baseStatus,
+      connectionStatus: this.isConnected && this.accessToken ? 'CONNECTED' : 'DISCONNECTED',
       dnaMetrics: this.dnaMetrics,
       tokenStatus: {
         hasToken: !!this.accessToken,
@@ -1253,6 +1349,7 @@ class FiservDNAConnector extends BaseBankingConnector {
         customerCacheSize: this.customerCache.size,
         hitRatio: this.calculateCacheHitRatio()
       },
+      cacheHitRatio: Math.round(cacheHitRatio * 100) / 100, // Round to 2 decimal places
       webhookStatus: {
         registeredWebhooks: Array.from(this.webhookHandlers.keys())
       },
