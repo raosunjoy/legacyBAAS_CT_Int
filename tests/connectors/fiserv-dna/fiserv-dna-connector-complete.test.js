@@ -524,19 +524,35 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
       const mockAccountData = {
         data: {
           accountNumber: '1234567890',
-          status: 'ACTIVE'
-        }
+          accountType: 'CHECKING',
+          status: 'ACTIVE',
+          customerId: 'CUST_001',
+          productCode: 'CHK_001',
+          openDate: '2023-01-01',
+          currency: 'USD',
+          balances: {},
+          holds: [],
+          fees: [],
+          restrictions: [],
+          metadata: {}
+        },
+        config: { metadata: { startTime: Date.now() } }
       };
 
       const mockBalanceData = {
         data: {
-          availableBalance: '1000.00'
-        }
+          availableBalance: '1000.00',
+          currentBalance: '1000.00',
+          pendingBalance: '0.00',
+          holds: [],
+          lastUpdated: new Date().toISOString()
+        },
+        config: { metadata: { startTime: Date.now() } }
       };
 
       mockHttpClient
-        .mockResolvedValueOnce(mockAccountData)
-        .mockResolvedValueOnce(mockBalanceData);
+        .mockImplementationOnce(() => Promise.resolve(mockAccountData))
+        .mockImplementationOnce(() => Promise.resolve(mockBalanceData));
 
       const result = await connector.validateTransaction(transaction);
 
@@ -556,8 +572,30 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
       };
 
       mockHttpClient
-        .mockResolvedValueOnce({ data: { status: 'ACTIVE' } })
-        .mockResolvedValueOnce({ data: { availableBalance: '100.00' } });
+        .mockImplementationOnce(() => Promise.resolve({ 
+          data: { 
+            accountNumber: '1234567890',
+            accountType: 'CHECKING',
+            status: 'ACTIVE',
+            currency: 'USD',
+            balances: {},
+            holds: [],
+            fees: [],
+            restrictions: [],
+            metadata: {}
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }))
+        .mockImplementationOnce(() => Promise.resolve({ 
+          data: { 
+            availableBalance: '100.00',
+            currentBalance: '100.00',
+            pendingBalance: '0.00',
+            holds: [],
+            lastUpdated: new Date().toISOString()
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
       const result = await connector.validateTransaction(transaction);
 
@@ -573,9 +611,20 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
         amount: 100.00
       };
 
-      mockHttpClient.mockResolvedValue({
-        data: { status: 'CLOSED' }
-      });
+      mockHttpClient.mockImplementationOnce(() => Promise.resolve({
+        data: { 
+          accountNumber: '1234567890',
+          accountType: 'CHECKING',
+          status: 'CLOSED',
+          currency: 'USD',
+          balances: {},
+          holds: [],
+          fees: [],
+          restrictions: [],
+          metadata: {}
+        },
+        config: { metadata: { startTime: Date.now() } }
+      }));
 
       const result = await connector.validateTransaction(transaction);
 
@@ -618,9 +667,34 @@ describe('FiservDNAConnector - Complete Test Suite', () => {
       };
 
       mockHttpClient
-        .mockResolvedValueOnce({ data: { status: 'ACTIVE' } })
-        .mockResolvedValueOnce({ data: { availableBalance: '20000.00' } })
-        .mockResolvedValueOnce(complianceResponse);
+        .mockImplementationOnce(() => Promise.resolve({ 
+          data: { 
+            accountNumber: '1234567890',
+            accountType: 'CHECKING',
+            status: 'ACTIVE',
+            currency: 'USD',
+            balances: {},
+            holds: [],
+            fees: [],
+            restrictions: [],
+            metadata: {}
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }))
+        .mockImplementationOnce(() => Promise.resolve({ 
+          data: { 
+            availableBalance: '20000.00',
+            currentBalance: '20000.00',
+            pendingBalance: '0.00',
+            holds: [],
+            lastUpdated: new Date().toISOString()
+          },
+          config: { metadata: { startTime: Date.now() } }
+        }))
+        .mockImplementationOnce(() => Promise.resolve({
+          ...complianceResponse,
+          config: { metadata: { startTime: Date.now() } }
+        }));
 
       const result = await connector.validateTransaction(transaction);
 
