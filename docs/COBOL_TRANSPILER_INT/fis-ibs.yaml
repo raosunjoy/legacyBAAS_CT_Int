@@ -1,0 +1,10 @@
+core_type: FIS_IBS
+data_types:
+  COMP-3: uint128
+  PIC X: string
+schedulers:
+  JCL: chainlink_cron
+integrations:
+  apis:
+    - FIS_OpenAccess_GetBalance
+optimize_gas: true

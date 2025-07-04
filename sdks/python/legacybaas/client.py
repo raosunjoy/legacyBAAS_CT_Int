@@ -1,296 +1,297 @@
 """
-Main Legacy B2BaaS Client for Python
-Synchronous client implementation
+LegacyBAAS Python Client
+Main client for all SDK operations
 """
 
-import logging
 import time
-from typing import Optional, Dict, Any, Union
+import json
+from typing import Dict, Any, Optional, Union
 from urllib.parse import urljoin
-
 import requests
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from urllib3.util.retry import Retry
 
-from .config import Config, Environment
-from .exceptions import (
+from .errors import (
     LegacyBaaSError,
     AuthenticationError,
     ValidationError,
     NetworkError,
-    RateLimitError,
-    ServiceUnavailableError,
+    RateLimitError
 )
-from .services.swift import SwiftProcessor
-from .services.blockchain import BlockchainRouter
-from .services.bancs import BancsIntegration
-from .services.analytics import AnalyticsService
-from .services.webhooks import WebhookHandler
-from .types.common import ApiResponse, HealthStatus
-from .utils import validate_api_key
+from .services.swift_processor import SwiftProcessor
+from .services.blockchain_router import BlockchainRouter
+from .services.banking_service import BankingService
+from .services.analytics_service import AnalyticsService
+from .services.webhook_handler import WebhookHandler
+from .services.compliance_service import ComplianceService
+from .utils import Logger
 
 
 class LegacyBaaSClient:
     """
-    Main Legacy B2BaaS Platform Client
-    
-    Provides access to all platform services including SWIFT processing,
-    blockchain routing, BaNCS integration, and analytics.
+    Main LegacyBAAS client for Python SDK
     
     Args:
-        api_key: Your Legacy B2BaaS API key
-        config: Optional configuration override
-        environment: Target environment (production, staging, sandbox)
-        
-    Example:
-        >>> client = LegacyBaaSClient(api_key="your-api-key")
-        >>> health = client.health()
-        >>> print(f"Platform status: {health.status}")
+        client_id: OAuth2 client ID
+        client_secret: OAuth2 client secret
+        base_url: API base URL
+        environment: Environment (production, sandbox, development)
+        timeout: Request timeout in seconds
+        max_retries: Maximum retry attempts
+        retry_delay: Delay between retries in seconds
+        enable_logging: Enable request logging
+        log_level: Logging level (DEBUG, INFO, WARN, ERROR)
     """
     
     def __init__(
         self,
-        api_key: str,
-        config: Optional[Config] = None,
-        environment: Environment = Environment.PRODUCTION,
-        **kwargs
+        client_id: str,
+        client_secret: str,
+        base_url: Optional[str] = None,
+        environment: str = "production",
+        timeout: float = 30.0,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        enable_logging: bool = True,
+        log_level: str = "INFO"
     ):
-        # Validate API key
-        if not validate_api_key(api_key):
-            raise AuthenticationError("Invalid API key format")
-            
-        self.api_key = api_key
-        self.config = config or Config.for_environment(environment)
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.environment = environment
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
         
-        # Override config with kwargs
-        for key, value in kwargs.items():
-            if hasattr(self.config, key):
-                setattr(self.config, key, value)
+        # Set base URL based on environment
+        if base_url:
+            self.base_url = base_url
+        else:
+            self.base_url = self._get_base_url(environment)
         
-        # Set up logging
-        self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
-        if self.config.enable_logging:
-            logging.basicConfig(level=getattr(logging, self.config.log_level))
+        # Initialize logger
+        self.logger = Logger(log_level) if enable_logging else None
         
-        # Initialize HTTP session
-        self.session = self._create_session()
+        # Authentication state
+        self.access_token: Optional[str] = None
+        self.token_expiry: Optional[float] = None
+        
+        # Initialize HTTP session with retry strategy
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=max_retries,
+            backoff_factor=retry_delay,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "PUT", "DELETE", "OPTIONS", "TRACE", "POST"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
         
         # Initialize services
         self.swift = SwiftProcessor(self)
         self.blockchain = BlockchainRouter(self)
-        self.bancs = BancsIntegration(self)
+        self.banking = BankingService(self)
         self.analytics = AnalyticsService(self)
         self.webhooks = WebhookHandler(self)
+        self.compliance = ComplianceService(self)
         
-        self.logger.info(f"Legacy B2BaaS Client initialized for {environment}")
+        if self.logger:
+            self.logger.info(f"LegacyBAAS Client initialized - Environment: {environment}, Base URL: {self.base_url}")
     
-    def _create_session(self) -> requests.Session:
-        """Create configured HTTP session with retries and headers"""
-        session = requests.Session()
-        
-        # Set default headers
-        session.headers.update({
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'User-Agent': f'LegacyBaaS-Python-SDK/1.0.0',
-            'X-SDK-Version': '1.0.0',
-            'X-SDK-Language': 'python',
-        })
-        
-        # Configure retries
-        retry_strategy = Retry(
-            total=self.config.max_retries,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "OPTIONS"],
-            backoff_factor=self.config.retry_delay,
-        )
-        
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        session.mount("http://", adapter)
-        session.mount("https://", adapter)
-        
-        return session
+    def _get_base_url(self, environment: str) -> str:
+        """Get base URL for environment"""
+        urls = {
+            "production": "https://api.legacybaas.com/v1",
+            "sandbox": "https://sandbox.legacybaas.com/v1", 
+            "development": "http://localhost:3000/v1"
+        }
+        return urls.get(environment, urls["production"])
     
-    def _build_url(self, endpoint: str) -> str:
-        """Build full API URL"""
-        base_api_url = f"{self.config.base_url}/api/{self.config.version}"
-        return urljoin(base_api_url + "/", endpoint.lstrip("/"))
-    
-    def _handle_response(self, response: requests.Response) -> Dict[str, Any]:
-        """Handle HTTP response and extract data"""
+    def authenticate(self) -> Dict[str, Any]:
+        """
+        Authenticate with OAuth2 client credentials flow
+        
+        Returns:
+            Authentication response with token info
+        """
+        if not self.client_id or not self.client_secret:
+            raise AuthenticationError("Client ID and Client Secret are required for authentication")
+        
         try:
-            # Log request/response if debug enabled
-            if self.config.log_level == "DEBUG":
-                self.logger.debug(f"Request: {response.request.method} {response.request.url}")
-                self.logger.debug(f"Response: {response.status_code} {response.text[:500]}")
+            response = self._make_request(
+                "POST",
+                "/auth/token",
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "scope": "banking:read banking:write blockchain:execute compliance:screen"
+                },
+                skip_auth=True
+            )
             
-            # Handle rate limiting
-            if response.status_code == 429:
-                retry_after = int(response.headers.get('Retry-After', 60))
-                raise RateLimitError(f"Rate limit exceeded. Retry after {retry_after} seconds")
+            self.access_token = response["access_token"]
+            self.token_expiry = time.time() + response["expires_in"]
             
-            # Handle authentication errors
-            if response.status_code == 401:
-                raise AuthenticationError("Invalid API key or authentication failed")
+            if self.logger:
+                self.logger.info("Authentication successful")
             
-            # Handle validation errors
-            if response.status_code == 400:
-                error_data = response.json() if response.content else {}
-                raise ValidationError(
-                    error_data.get('message', 'Validation error'),
-                    details=error_data.get('details')
-                )
+            return response
             
-            # Handle service unavailable
-            if response.status_code == 503:
-                raise ServiceUnavailableError("Service temporarily unavailable")
-            
-            # Handle other client/server errors
-            if response.status_code >= 400:
-                error_data = response.json() if response.content else {}
-                raise LegacyBaaSError(
-                    error_data.get('message', f'HTTP {response.status_code}'),
-                    status_code=response.status_code,
-                    error_code=error_data.get('code')
-                )
-            
-            # Parse successful response
-            if response.content:
-                data = response.json()
-                if isinstance(data, dict) and 'data' in data:
-                    return data['data']
-                return data
-            
-            return {}
-            
-        except requests.exceptions.JSONDecodeError:
-            raise LegacyBaaSError(f"Invalid JSON response: {response.text}")
-        except requests.exceptions.RequestException as e:
-            raise NetworkError(f"Network error: {str(e)}")
+        except Exception as e:
+            if self.logger:
+                self.logger.error(f"Authentication failed: {e}")
+            raise AuthenticationError("Failed to authenticate with LegacyBAAS API")
     
-    def request(
+    def is_authenticated(self) -> bool:
+        """Check if client has valid authentication token"""
+        return bool(
+            self.access_token and 
+            self.token_expiry and 
+            time.time() < self.token_expiry
+        )
+    
+    def ensure_authenticated(self) -> None:
+        """Ensure client is authenticated, refresh token if necessary"""
+        if not self.is_authenticated():
+            self.authenticate()
+    
+    def _make_request(
         self,
         method: str,
         endpoint: str,
         data: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
         headers: Optional[Dict[str, str]] = None,
-        timeout: Optional[float] = None,
+        skip_auth: bool = False
     ) -> Dict[str, Any]:
         """
-        Make HTTP request to API endpoint
+        Make HTTP request to API
         
         Args:
-            method: HTTP method (GET, POST, PUT, DELETE)
-            endpoint: API endpoint path
+            method: HTTP method
+            endpoint: API endpoint
             data: Request body data
             params: Query parameters
             headers: Additional headers
-            timeout: Request timeout override
+            skip_auth: Skip authentication
             
         Returns:
-            Response data
-            
-        Raises:
-            LegacyBaaSError: API or network error
+            API response data
         """
-        url = self._build_url(endpoint)
-        timeout = timeout or self.config.timeout
+        if not skip_auth:
+            self.ensure_authenticated()
         
-        request_headers = {}
+        url = urljoin(self.base_url, endpoint)
+        
+        # Prepare headers
+        request_headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "LegacyBAAS-Python-SDK/2.0.0",
+            "Accept": "application/json"
+        }
+        
+        if self.access_token and not skip_auth:
+            request_headers["Authorization"] = f"Bearer {self.access_token}"
+        
         if headers:
             request_headers.update(headers)
         
+        # Prepare request data
+        request_kwargs = {
+            "timeout": self.timeout,
+            "headers": request_headers
+        }
+        
+        if params:
+            request_kwargs["params"] = params
+        
+        if data and method in ["POST", "PUT", "PATCH"]:
+            request_kwargs["json"] = data
+        
         try:
-            response = self.session.request(
-                method=method,
-                url=url,
-                json=data,
-                params=params,
-                headers=request_headers,
-                timeout=timeout,
-            )
+            if self.logger:
+                self.logger.debug(f"Making {method} request to {endpoint}")
             
-            return self._handle_response(response)
+            response = self.session.request(method, url, **request_kwargs)
+            
+            # Handle HTTP errors
+            if not response.ok:
+                try:
+                    error_data = response.json()
+                except:
+                    error_data = {"message": response.text or f"HTTP {response.status_code}"}
+                
+                if response.status_code == 401:
+                    raise AuthenticationError(error_data.get("message", "Authentication failed"))
+                elif response.status_code == 400:
+                    raise ValidationError(
+                        error_data.get("message", "Validation error"),
+                        details=error_data.get("details")
+                    )
+                elif response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    raise RateLimitError(
+                        error_data.get("message", "Rate limit exceeded"),
+                        retry_after=int(retry_after) if retry_after else None
+                    )
+                elif response.status_code >= 500:
+                    raise NetworkError(error_data.get("message", "Server error"))
+                else:
+                    raise LegacyBaaSError(
+                        error_data.get("message", f"HTTP {response.status_code}"),
+                        status_code=response.status_code,
+                        error_code=error_data.get("code")
+                    )
+            
+            # Parse response
+            try:
+                response_data = response.json()
+            except:
+                response_data = {"data": response.text}
+            
+            if self.logger:
+                self.logger.debug(f"Request completed: {method} {endpoint}")
+            
+            return response_data.get("data", response_data)
             
         except requests.exceptions.Timeout:
-            raise NetworkError(f"Request timeout after {timeout} seconds")
+            raise NetworkError("Request timeout")
         except requests.exceptions.ConnectionError:
-            raise NetworkError("Connection error - check network connectivity")
+            raise NetworkError("Connection error")
         except requests.exceptions.RequestException as e:
-            raise NetworkError(f"Request error: {str(e)}")
+            raise NetworkError(f"Request failed: {e}")
     
-    def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
-        """Make GET request"""
-        return self.request("GET", endpoint, params=params, **kwargs)
-    
-    def post(self, endpoint: str, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
-        """Make POST request"""
-        return self.request("POST", endpoint, data=data, **kwargs)
-    
-    def put(self, endpoint: str, data: Optional[Dict[str, Any]] = None, **kwargs) -> Dict[str, Any]:
-        """Make PUT request"""
-        return self.request("PUT", endpoint, data=data, **kwargs)
-    
-    def delete(self, endpoint: str, **kwargs) -> Dict[str, Any]:
-        """Make DELETE request"""
-        return self.request("DELETE", endpoint, **kwargs)
-    
-    def health(self) -> HealthStatus:
+    def get_health(self) -> Dict[str, Any]:
         """
-        Check platform health status
+        Get API health status
         
         Returns:
             Health status information
         """
-        data = self.get("/health")
-        return HealthStatus(**data)
+        return self._make_request("GET", "/health")
     
-    def ping(self) -> Dict[str, Any]:
+    def get_metrics(self) -> Dict[str, Any]:
         """
-        Test API connectivity
+        Get platform metrics
         
         Returns:
-            Ping response with timestamp
+            Platform metrics
         """
-        return self.get("/ping")
+        return self._make_request("GET", "/admin/metrics")
     
-    def get_account(self) -> Dict[str, Any]:
-        """
-        Get account information
-        
-        Returns:
-            Account details
-        """
-        return self.get("/account")
-    
-    def get_usage(self, period: str = "day") -> Dict[str, Any]:
-        """
-        Get API usage statistics
-        
-        Args:
-            period: Time period ('day', 'week', 'month')
-            
-        Returns:
-            Usage statistics
-        """
-        return self.get("/usage", params={"period": period})
-    
-    def close(self):
-        """Close HTTP session and cleanup resources"""
+    def close(self) -> None:
+        """Close client and cleanup resources"""
         if self.session:
             self.session.close()
-            self.session = None
-        self.logger.info("Legacy B2BaaS Client closed")
+        self.access_token = None
+        self.token_expiry = None
+        
+        if self.logger:
+            self.logger.info("LegacyBAAS Client closed")
     
     def __enter__(self):
-        """Context manager entry"""
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit"""
         self.close()
-    
-    def __repr__(self):
-        return f"LegacyBaaSClient(config={self.config})"

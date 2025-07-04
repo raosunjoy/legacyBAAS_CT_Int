@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "forge-std/Test.sol";
+import "../Mortgage.sol";
+
+contract TestMortgage is Test {
+    Mortgage contractInstance;
+    
+    function setUp() public {
+        contractInstance = new Mortgage();
+    }
+    
+    function testExecute() public {
+        assertEq(contractInstance.execute(), (principal * rate) / (1 - (1 + rate) ** -term));
+    }
+}

@@ -1,0 +1,6 @@
+core_type: FISERV_DNA
+data_types:
+  COMP-3: BigDecimal
+  PIC X: String
+file_handling:
+  PHYSICAL_FILE: corda_state

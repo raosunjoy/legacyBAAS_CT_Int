@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "forge-std/Test.sol";
+import "../{{ contract_name }}.sol";
+
+contract Test{{ contract_name }} is Test {
+    {{ contract_name }} contractInstance;
+    
+    function setUp() public {
+        contractInstance = new {{ contract_name }}();
+    }
+    
+    function testExecute() public {
+        {% for logic in logic %}
+        {% if logic.operation == 'compute' %}
+        assertEq(contractInstance.execute(), {{ logic.expression }});
+        {% endif %}
+        {% endfor %}
+    }
+}

@@ -1,0 +1,13 @@
+@BelongsToContract({{ contract_name }}Contract::class)
+data class {{ state_name }}(
+    {% for var in variables %}
+    val {{ var.name }}: {{ var.output_type }}{% if not loop.last %},{% endif %}{% endfor %}
+) : ContractState {
+    fun validate() {
+        {% for logic in logic %}
+        {% if logic.operation == 'if' %}
+        require({{ logic.condition }}) { "{{ logic.perform }}" }
+        {% endif %}
+        {% endfor %}
+    }
+}

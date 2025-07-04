@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract {{ contract_name }} {
+    {% for var in variables %}
+    {{ var.output_type }} public {{ var.name }};{% endfor %}
+    
+    function execute() public pure returns (uint256) {
+        {% for logic in logic %}
+        {% if logic.operation == 'compute' %}
+        return {{ logic.expression }};
+        {% endif %}
+        {% endfor %}
+    }
+}

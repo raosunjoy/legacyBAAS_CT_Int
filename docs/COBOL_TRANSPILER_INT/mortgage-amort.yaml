@@ -1,0 +1,7 @@
+core_type: FIS_IBS
+use_case: mortgage_amortization
+data_types:
+  COMP-3: uint128
+  PIC S9(3): uint16
+blockchain: ethereum
+optimize_gas: true

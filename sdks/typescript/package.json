@@ -1,0 +1,72 @@
+{
+  "name": "@legacybaas/sdk",
+  "version": "2.0.0",
+  "description": "Official TypeScript/JavaScript SDK for LegacyBAAS - Banking Legacy-to-Blockchain B2BaaS Platform",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && rollup -c",
+    "build:dev": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "prepublishOnly": "npm run build && npm run test",
+    "docs": "typedoc --out docs src/index.ts"
+  },
+  "keywords": [
+    "legacy",
+    "banking",
+    "blockchain",
+    "swift",
+    "b2baas",
+    "fintech",
+    "payments",
+    "compliance",
+    "sdk",
+    "typescript",
+    "javascript"
+  ],
+  "author": "LegacyBAAS <support@legacybaas.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/legacybaas/sdk-typescript.git"
+  },
+  "bugs": {
+    "url": "https://github.com/legacybaas/sdk-typescript/issues"
+  },
+  "homepage": "https://docs.legacybaas.com",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "events": "^3.3.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.5.0",
+    "rollup": "^3.0.0",
+    "rollup-plugin-typescript2": "^0.34.0",
+    "ts-jest": "^29.1.0",
+    "typedoc": "^0.24.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.5.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
