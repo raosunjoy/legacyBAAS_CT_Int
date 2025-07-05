@@ -208,14 +208,23 @@ class TemplateEngine {
    * Create default templates if none exist
    */
   async _createDefaultTemplates() {
-    await fs.mkdir(this.config.templatePath, { recursive: true });
-    
-    // Create default Solidity template
-    const solidityTemplate = this._getDefaultSolidityTemplate();
-    await fs.writeFile(
-      path.join(this.config.templatePath, 'solidity.hbs'),
-      solidityTemplate
-    );
+    try {
+      await fs.mkdir(this.config.templatePath, { recursive: true });
+      
+      // Create default Solidity template
+      const solidityTemplate = this._getDefaultSolidityTemplate();
+      await fs.writeFile(
+        path.join(this.config.templatePath, 'solidity.hbs'),
+        solidityTemplate
+      );
+    } catch (error) {
+      logger.warn('Could not create template files, using in-memory templates', { error: error.message });
+      
+      // Use in-memory templates instead
+      this.templates.set('solidity.hbs', this.handlebars.compile(this._getDefaultSolidityTemplate()));
+      this.templates.set('corda.hbs', this.handlebars.compile(this._getDefaultCordaTemplate()));
+      return;
+    }
 
     // Create default Corda template
     const cordaTemplate = this._getDefaultCordaTemplate();
@@ -356,9 +365,9 @@ class TemplateEngine {
    */
   _generateContractName(programId) {
     return programId
-      .replace(/[^A-Z0-9]/g, '')
-      .split('')
-      .map((char, index) => index === 0 ? char.toUpperCase() : char.toLowerCase())
+      .replace(/[^A-Z0-9-]/g, '')
+      .split(/[-_]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join('');
   }
 
@@ -461,6 +470,11 @@ class TemplateEngine {
     // Helper for capitalizing first letter
     this.handlebars.registerHelper('capitalize', (str) => {
       return str.charAt(0).toUpperCase() + str.slice(1);
+    });
+
+    // Helper for converting to lowercase
+    this.handlebars.registerHelper('lowercase', (str) => {
+      return str.toLowerCase();
     });
 
     // Helper for converting to camelCase
