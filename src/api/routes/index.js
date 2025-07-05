@@ -10,9 +10,11 @@ const router = express.Router();
 
 // Import route modules
 const cobolRoutes = require('./cobol-routes');
+const bankingRoutes = require('../banking');
 
 // Mount route modules
 router.use('/cobol', cobolRoutes);
+router.use('/banking', bankingRoutes);
 
 // API root endpoint
 router.get('/', (req, res) => {
