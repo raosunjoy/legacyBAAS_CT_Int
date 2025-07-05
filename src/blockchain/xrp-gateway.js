@@ -599,6 +599,359 @@ class XRPGateway extends BaseBlockchainGateway {
   }
 
   /**
+   * Deploy COBOL-generated payment contract to XRP Ledger
+   * @param {Object} contractData - Contract deployment data
+   * @param {Object} options - Deployment options
+   * @returns {Promise<Object>} Deployment result
+   */
+  async deployCobolPaymentContract(contractData, options = {}) {
+    const startTime = Date.now();
+    const deploymentId = uuidv4();
+    
+    try {
+      logger.info('Deploying COBOL-generated payment contract', {
+        deploymentId,
+        contractName: contractData.name,
+        bankingSystem: contractData.metadata?.bankingSystem,
+        network: this.networkType
+      });
+
+      // Validate deployment requirements
+      this.validatePaymentContractDeployment(contractData);
+
+      // Ensure network connection
+      await this.ensureConnection();
+
+      if (!this.wallet) {
+        throw new Error('Wallet not initialized - cannot deploy payment contracts');
+      }
+
+      // Prepare payment contract based on COBOL logic
+      let deploymentResult;
+      const contractType = contractData.contractType || 'ESCROW';
+
+      if (contractType === 'ESCROW') {
+        deploymentResult = await this.deployEscrowContract(contractData, deploymentId);
+      } else if (contractType === 'PAYMENT_CHANNEL') {
+        deploymentResult = await this.deployPaymentChannelContract(contractData, deploymentId);
+      } else {
+        throw new Error(`Unsupported XRP contract type: ${contractType}`);
+      }
+
+      const deploymentTime = Date.now() - startTime;
+
+      logger.info('COBOL payment contract deployed successfully', {
+        deploymentId,
+        contractType,
+        txHash: deploymentResult.txHash,
+        deploymentTime
+      });
+
+      // Emit deployment event
+      this.emit('paymentContractDeployed', {
+        deploymentId,
+        contractName: contractData.name,
+        contractType,
+        txHash: deploymentResult.txHash,
+        deploymentTime,
+        networkType: this.networkType
+      });
+
+      return {
+        success: true,
+        deploymentId,
+        contractType,
+        transactionHash: deploymentResult.txHash,
+        ledgerIndex: deploymentResult.ledgerIndex,
+        deploymentTime,
+        networkType: this.networkType,
+        contractInfo: deploymentResult.contractInfo
+      };
+
+    } catch (error) {
+      const deploymentTime = Date.now() - startTime;
+      
+      logger.error('COBOL payment contract deployment failed', {
+        deploymentId,
+        contractName: contractData.name,
+        error: error.message,
+        deploymentTime
+      });
+
+      // Emit deployment failure event
+      this.emit('paymentContractDeploymentFailed', {
+        deploymentId,
+        contractName: contractData.name,
+        error: error.message,
+        deploymentTime,
+        networkType: this.networkType
+      });
+
+      throw new Error(`Payment contract deployment failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Deploy escrow contract on XRP Ledger
+   * @param {Object} contractData - Contract data
+   * @param {string} deploymentId - Deployment ID
+   * @returns {Promise<Object>} Deployment result
+   */
+  async deployEscrowContract(contractData, deploymentId) {
+    const escrowConfig = contractData.contractConfig || {};
+    
+    // Calculate finish time based on COBOL business logic
+    const finishAfter = escrowConfig.finishAfter || Date.now() + (24 * 60 * 60); // 24 hours default
+    const condition = escrowConfig.condition || null;
+    const fulfillment = escrowConfig.fulfillment || null;
+
+    const escrowCreate = {
+      TransactionType: 'EscrowCreate',
+      Account: this.wallet.classicAddress,
+      Destination: escrowConfig.destination,
+      Amount: String(escrowConfig.amount || '1000000'), // 1 XRP default in drops
+      FinishAfter: Math.floor(finishAfter / 1000), // Convert to XRP time
+      ...(condition && { Condition: condition }),
+      ...(fulfillment && { Fulfillment: fulfillment }),
+      Memos: [{
+        Memo: {
+          MemoType: Buffer.from('COBOL_CONTRACT', 'utf8').toString('hex').toUpperCase(),
+          MemoData: Buffer.from(JSON.stringify({
+            deploymentId,
+            sourceProgram: contractData.metadata?.sourceProgram,
+            bankingSystem: contractData.metadata?.bankingSystem
+          }), 'utf8').toString('hex').toUpperCase()
+        }
+      }]
+    };
+
+    // Submit escrow creation transaction
+    const prepared = await this.client.autofill(escrowCreate);
+    const signed = this.wallet.sign(prepared);
+    const result = await this.client.submitAndWait(signed.tx_blob);
+
+    if (result.result.meta.TransactionResult !== 'tesSUCCESS') {
+      throw new Error(`Escrow creation failed: ${result.result.meta.TransactionResult}`);
+    }
+
+    return {
+      txHash: result.result.hash,
+      ledgerIndex: result.result.ledger_index,
+      contractInfo: {
+        type: 'ESCROW',
+        escrowSequence: result.result.Sequence,
+        destination: escrowConfig.destination,
+        amount: escrowConfig.amount,
+        finishAfter,
+        deploymentId,
+        metadata: contractData.metadata
+      }
+    };
+  }
+
+  /**
+   * Deploy payment channel contract on XRP Ledger
+   * @param {Object} contractData - Contract data
+   * @param {string} deploymentId - Deployment ID
+   * @returns {Promise<Object>} Deployment result
+   */
+  async deployPaymentChannelContract(contractData, deploymentId) {
+    const channelConfig = contractData.contractConfig || {};
+    
+    const paymentChannelCreate = {
+      TransactionType: 'PaymentChannelCreate',
+      Account: this.wallet.classicAddress,
+      Destination: channelConfig.destination,
+      Amount: String(channelConfig.amount || '10000000'), // 10 XRP default in drops
+      SettleDelay: channelConfig.settleDelay || 86400, // 1 day default
+      PublicKey: channelConfig.publicKey || this.wallet.publicKey,
+      Memos: [{
+        Memo: {
+          MemoType: Buffer.from('COBOL_PAYMENT_CHANNEL', 'utf8').toString('hex').toUpperCase(),
+          MemoData: Buffer.from(JSON.stringify({
+            deploymentId,
+            sourceProgram: contractData.metadata?.sourceProgram,
+            bankingSystem: contractData.metadata?.bankingSystem
+          }), 'utf8').toString('hex').toUpperCase()
+        }
+      }]
+    };
+
+    // Submit payment channel creation transaction
+    const prepared = await this.client.autofill(paymentChannelCreate);
+    const signed = this.wallet.sign(prepared);
+    const result = await this.client.submitAndWait(signed.tx_blob);
+
+    if (result.result.meta.TransactionResult !== 'tesSUCCESS') {
+      throw new Error(`Payment channel creation failed: ${result.result.meta.TransactionResult}`);
+    }
+
+    return {
+      txHash: result.result.hash,
+      ledgerIndex: result.result.ledger_index,
+      contractInfo: {
+        type: 'PAYMENT_CHANNEL',
+        channelId: result.result.hash, // Use transaction hash as channel ID
+        destination: channelConfig.destination,
+        amount: channelConfig.amount,
+        settleDelay: channelConfig.settleDelay,
+        deploymentId,
+        metadata: contractData.metadata
+      }
+    };
+  }
+
+  /**
+   * Validate payment contract deployment requirements
+   * @param {Object} contractData - Contract data to validate
+   */
+  validatePaymentContractDeployment(contractData) {
+    if (!contractData) {
+      throw new Error('Contract data is required for deployment');
+    }
+
+    if (!contractData.name) {
+      throw new Error('Contract name is required');
+    }
+
+    if (!contractData.contractConfig) {
+      throw new Error('Contract configuration is required');
+    }
+
+    if (!contractData.contractConfig.destination) {
+      throw new Error('Destination address is required for payment contracts');
+    }
+
+    // Validate COBOL-specific metadata
+    if (contractData.metadata?.sourceType === 'cobol') {
+      if (!contractData.metadata.bankingSystem) {
+        throw new Error('Banking system is required for COBOL contracts');
+      }
+
+      if (!contractData.metadata.sourceProgram) {
+        throw new Error('Source COBOL program identifier is required');
+      }
+    }
+  }
+
+  /**
+   * Get payment contract deployment status
+   * @param {string} deploymentId - Deployment ID to check
+   * @returns {Promise<Object>} Deployment status
+   */
+  async getPaymentContractDeploymentStatus(deploymentId) {
+    try {
+      // Search for transactions with the deployment ID in memos
+      const accountTx = await this.client.request({
+        command: 'account_tx',
+        account: this.wallet.classicAddress,
+        limit: 100
+      });
+
+      for (const txEntry of accountTx.result.transactions) {
+        const tx = txEntry.tx;
+        if (tx.Memos) {
+          for (const memo of tx.Memos) {
+            try {
+              const memoData = Buffer.from(memo.Memo.MemoData, 'hex').toString('utf8');
+              const data = JSON.parse(memoData);
+              
+              if (data.deploymentId === deploymentId) {
+                const validated = txEntry.validated;
+                const result = txEntry.meta?.TransactionResult;
+                
+                return {
+                  status: validated && result === 'tesSUCCESS' ? 'confirmed' : 'failed',
+                  deploymentId,
+                  transactionHash: tx.hash,
+                  ledgerIndex: tx.ledger_index,
+                  result: result,
+                  validated: validated,
+                  metadata: data
+                };
+              }
+            } catch (e) {
+              // Skip invalid memo data
+            }
+          }
+        }
+      }
+
+      return {
+        status: 'not_found',
+        deploymentId,
+        message: 'Payment contract deployment not found'
+      };
+
+    } catch (error) {
+      logger.error('Failed to get payment contract deployment status', {
+        deploymentId,
+        error: error.message
+      });
+
+      return {
+        status: 'error',
+        deploymentId,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * List deployed payment contracts
+   * @returns {Promise<Array>} List of deployed contracts
+   */
+  async listDeployedPaymentContracts() {
+    try {
+      const contracts = [];
+      
+      // Get recent transactions
+      const accountTx = await this.client.request({
+        command: 'account_tx',
+        account: this.wallet.classicAddress,
+        limit: 200
+      });
+
+      for (const txEntry of accountTx.result.transactions) {
+        const tx = txEntry.tx;
+        
+        // Check for escrow or payment channel transactions with COBOL memos
+        if ((tx.TransactionType === 'EscrowCreate' || tx.TransactionType === 'PaymentChannelCreate') && tx.Memos) {
+          for (const memo of tx.Memos) {
+            try {
+              const memoType = Buffer.from(memo.Memo.MemoType, 'hex').toString('utf8');
+              if (memoType.includes('COBOL')) {
+                const memoData = Buffer.from(memo.Memo.MemoData, 'hex').toString('utf8');
+                const data = JSON.parse(memoData);
+                
+                contracts.push({
+                  deploymentId: data.deploymentId,
+                  contractType: tx.TransactionType === 'EscrowCreate' ? 'ESCROW' : 'PAYMENT_CHANNEL',
+                  transactionHash: tx.hash,
+                  bankingSystem: data.bankingSystem,
+                  sourceProgram: data.sourceProgram,
+                  deployedAt: new Date(946684800000 + (tx.date * 1000)).toISOString(), // XRP epoch conversion
+                  validated: txEntry.validated
+                });
+              }
+            } catch (e) {
+              // Skip invalid memo data
+            }
+          }
+        }
+      }
+
+      return contracts;
+
+    } catch (error) {
+      logger.error('Failed to list deployed payment contracts', {
+        error: error.message
+      });
+      return [];
+    }
+  }
+
+  /**
    * Cleanup resources
    */
   async cleanup() {

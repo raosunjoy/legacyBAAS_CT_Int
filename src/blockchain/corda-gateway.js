@@ -752,6 +752,323 @@ class CordaGateway extends BaseBlockchainGateway {
   }
 
   /**
+   * Deploy COBOL-generated Corda flow
+   * @param {Object} flowData - Flow deployment data
+   * @param {Object} options - Deployment options
+   * @returns {Promise<Object>} Deployment result
+   */
+  async deployCobolFlow(flowData, options = {}) {
+    const startTime = Date.now();
+    const deploymentId = uuidv4();
+    
+    try {
+      logger.info('Deploying COBOL-generated Corda flow', {
+        deploymentId,
+        flowName: flowData.name,
+        bankingSystem: flowData.metadata?.bankingSystem,
+        network: this.networkType
+      });
+
+      // Validate deployment requirements
+      this.validateFlowDeployment(flowData);
+
+      // Ensure network connection
+      await this.ensureConnection();
+
+      if (!this.cordaClient) {
+        throw new Error('Corda client not initialized - cannot deploy flows');
+      }
+
+      // Prepare flow for deployment
+      const flowClass = flowData.compiled.className;
+      const flowArgs = flowData.deploymentArgs || [];
+
+      // Create flow request with Corda-specific configurations
+      const flowRequest = {
+        flowName: flowClass,
+        flowArgs: this.prepareFlowArguments(flowArgs, flowData.metadata),
+        clientRequestId: deploymentId
+      };
+
+      logger.info('Starting Corda flow deployment', {
+        deploymentId,
+        flowName: flowClass,
+        args: flowArgs.length
+      });
+
+      // Start the flow
+      const flowHandle = await this.cordaClient.startFlow(flowRequest);
+      
+      // Track the active flow
+      this.activeFlows.set(deploymentId, {
+        flowId: flowHandle.flowId,
+        startTime: new Date().toISOString(),
+        flowName: flowClass,
+        metadata: flowData.metadata
+      });
+
+      // Wait for flow completion
+      const flowResult = await this.cordaClient.waitForFlowCompletion(flowHandle.flowId);
+
+      // Store flow information
+      const flowInfo = {
+        deploymentId,
+        flowId: flowHandle.flowId,
+        flowName: flowClass,
+        result: flowResult,
+        deployedAt: new Date().toISOString(),
+        metadata: {
+          ...flowData.metadata,
+          network: this.networkType,
+          nodeAddress: this.config.nodeUrl
+        }
+      };
+
+      // Remove from active flows
+      this.activeFlows.delete(deploymentId);
+
+      const deploymentTime = Date.now() - startTime;
+
+      logger.info('COBOL Corda flow deployed successfully', {
+        deploymentId,
+        flowId: flowHandle.flowId,
+        result: flowResult,
+        deploymentTime
+      });
+
+      // Emit deployment event
+      this.emit('flowDeployed', {
+        deploymentId,
+        flowName: flowClass,
+        flowId: flowHandle.flowId,
+        result: flowResult,
+        deploymentTime,
+        networkType: this.networkType
+      });
+
+      return {
+        success: true,
+        deploymentId,
+        flowId: flowHandle.flowId,
+        flowName: flowClass,
+        result: flowResult,
+        deploymentTime,
+        networkType: this.networkType,
+        flowInfo
+      };
+
+    } catch (error) {
+      const deploymentTime = Date.now() - startTime;
+      
+      // Remove from active flows on failure
+      this.activeFlows.delete(deploymentId);
+      
+      logger.error('COBOL Corda flow deployment failed', {
+        deploymentId,
+        flowName: flowData.name,
+        error: error.message,
+        deploymentTime
+      });
+
+      // Emit deployment failure event
+      this.emit('flowDeploymentFailed', {
+        deploymentId,
+        flowName: flowData.name,
+        error: error.message,
+        deploymentTime,
+        networkType: this.networkType
+      });
+
+      throw new Error(`Flow deployment failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Validate flow deployment requirements
+   * @param {Object} flowData - Flow data to validate
+   */
+  validateFlowDeployment(flowData) {
+    if (!flowData) {
+      throw new Error('Flow data is required for deployment');
+    }
+
+    if (!flowData.name) {
+      throw new Error('Flow name is required');
+    }
+
+    if (!flowData.compiled) {
+      throw new Error('Compiled flow data is required');
+    }
+
+    if (!flowData.compiled.className) {
+      throw new Error('Flow class name is required');
+    }
+
+    // Validate COBOL-specific metadata
+    if (flowData.metadata?.sourceType === 'cobol') {
+      if (!flowData.metadata.bankingSystem) {
+        throw new Error('Banking system is required for COBOL flows');
+      }
+
+      if (!flowData.metadata.sourceProgram) {
+        throw new Error('Source COBOL program identifier is required');
+      }
+    }
+  }
+
+  /**
+   * Prepare flow arguments for Corda deployment
+   * @param {Array} args - Raw arguments
+   * @param {Object} metadata - Flow metadata
+   * @returns {Array} Prepared arguments
+   */
+  prepareFlowArguments(args, metadata) {
+    const preparedArgs = [];
+
+    for (const arg of args) {
+      if (arg.type === 'Party') {
+        // Resolve party reference
+        preparedArgs.push({
+          type: 'net.corda.core.identity.Party',
+          value: arg.value || this.config.legalName
+        });
+      } else if (arg.type === 'Amount') {
+        // Format amount for Corda
+        preparedArgs.push({
+          type: 'net.corda.core.contracts.Amount',
+          value: {
+            quantity: arg.value.amount,
+            token: arg.value.currency || 'USD'
+          }
+        });
+      } else if (arg.type === 'UniqueIdentifier') {
+        // Generate unique identifier
+        preparedArgs.push({
+          type: 'net.corda.core.contracts.UniqueIdentifier',
+          value: {
+            externalId: arg.value || uuidv4(),
+            id: uuidv4()
+          }
+        });
+      } else {
+        // Pass through other arguments
+        preparedArgs.push(arg);
+      }
+    }
+
+    // Add metadata as final argument if COBOL source
+    if (metadata?.sourceType === 'cobol') {
+      preparedArgs.push({
+        type: 'java.lang.String',
+        value: JSON.stringify({
+          sourceProgram: metadata.sourceProgram,
+          bankingSystem: metadata.bankingSystem,
+          transpilerVersion: metadata.transpilerVersion
+        })
+      });
+    }
+
+    return preparedArgs;
+  }
+
+  /**
+   * Get flow deployment status
+   * @param {string} deploymentId - Deployment ID to check
+   * @returns {Promise<Object>} Deployment status
+   */
+  async getFlowDeploymentStatus(deploymentId) {
+    try {
+      // Check if flow is still active
+      const activeFlow = this.activeFlows.get(deploymentId);
+      if (activeFlow) {
+        try {
+          const flowStatus = await this.cordaClient.getFlowStatus(activeFlow.flowId);
+          return {
+            status: 'running',
+            deploymentId,
+            flowId: activeFlow.flowId,
+            flowName: activeFlow.flowName,
+            startTime: activeFlow.startTime,
+            currentState: flowStatus
+          };
+        } catch (error) {
+          return {
+            status: 'unknown',
+            deploymentId,
+            flowId: activeFlow.flowId,
+            error: error.message
+          };
+        }
+      }
+
+      // Flow completed or not found
+      return {
+        status: 'completed_or_not_found',
+        deploymentId,
+        message: 'Flow deployment completed or not found'
+      };
+
+    } catch (error) {
+      logger.error('Failed to get flow deployment status', {
+        deploymentId,
+        error: error.message
+      });
+
+      return {
+        status: 'error',
+        deploymentId,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * List all active flows
+   * @returns {Array} List of active flows
+   */
+  listActiveFlows() {
+    return Array.from(this.activeFlows.entries()).map(([deploymentId, flow]) => ({
+      deploymentId,
+      flowId: flow.flowId,
+      flowName: flow.flowName,
+      startTime: flow.startTime,
+      bankingSystem: flow.metadata?.bankingSystem,
+      sourceProgram: flow.metadata?.sourceProgram
+    }));
+  }
+
+  /**
+   * Cancel a running flow
+   * @param {string} deploymentId - Deployment ID of flow to cancel
+   * @returns {Promise<boolean>} Cancellation success
+   */
+  async cancelFlow(deploymentId) {
+    try {
+      const activeFlow = this.activeFlows.get(deploymentId);
+      if (!activeFlow) {
+        return false;
+      }
+
+      await this.cordaClient.killFlow(activeFlow.flowId);
+      this.activeFlows.delete(deploymentId);
+
+      logger.info('Flow cancelled successfully', {
+        deploymentId,
+        flowId: activeFlow.flowId
+      });
+
+      return true;
+
+    } catch (error) {
+      logger.error('Failed to cancel flow', {
+        deploymentId,
+        error: error.message
+      });
+      return false;
+    }
+  }
+
+  /**
    * Cleanup resources
    */
   async cleanup() {

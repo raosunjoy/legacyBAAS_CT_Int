@@ -783,6 +783,267 @@ class EthereumL2Gateway extends BaseBlockchainGateway {
   }
 
   /**
+   * Deploy COBOL-generated smart contract to Ethereum L2
+   * @param {Object} contractData - Contract deployment data
+   * @param {Object} options - Deployment options
+   * @returns {Promise<Object>} Deployment result
+   */
+  async deployCobolContract(contractData, options = {}) {
+    const startTime = Date.now();
+    const deploymentId = uuidv4();
+    
+    try {
+      logger.info('Deploying COBOL-generated smart contract', {
+        deploymentId,
+        contractName: contractData.name,
+        bankingSystem: contractData.metadata?.bankingSystem,
+        network: this.networkType
+      });
+
+      // Validate deployment requirements
+      this.validateContractDeployment(contractData);
+
+      // Ensure network connection
+      await this.ensureConnection();
+
+      if (!this.wallet) {
+        throw new Error('Wallet not initialized - cannot deploy contracts');
+      }
+
+      // Prepare contract deployment
+      const { abi, bytecode } = contractData.compiled;
+      const factory = new ethers.ContractFactory(abi, bytecode, this.wallet);
+
+      // Calculate gas estimates
+      const gasPrice = await this.getGasPrice();
+      const constructorArgs = contractData.constructorArgs || [];
+      
+      // Estimate gas for deployment
+      const gasEstimate = await factory.getDeployTransaction(...constructorArgs).then(tx => 
+        this.provider.estimateGas(tx)
+      );
+
+      // Add 20% buffer for gas
+      const gasLimit = Math.floor(Number(gasEstimate) * 1.2);
+
+      logger.info('Deploying contract with gas estimate', {
+        deploymentId,
+        gasEstimate: gasEstimate.toString(),
+        gasLimit,
+        gasPrice: gasPrice.maxFeePerGas
+      });
+
+      // Deploy contract
+      const contract = await factory.deploy(...constructorArgs, {
+        gasLimit,
+        maxFeePerGas: gasPrice.maxFeePerGas,
+        maxPriorityFeePerGas: gasPrice.maxPriorityFeePerGas
+      });
+
+      // Wait for deployment confirmation
+      const receipt = await contract.deploymentTransaction().wait();
+      const deployedContract = contract.attach(await contract.getAddress());
+
+      // Store contract reference
+      const contractInfo = {
+        address: await contract.getAddress(),
+        abi: abi,
+        deploymentTxHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+        deploymentId,
+        metadata: {
+          ...contractData.metadata,
+          deployedAt: new Date().toISOString(),
+          network: this.networkType,
+          chainId: this.config.chainId
+        }
+      };
+
+      this.contracts.set(contractData.name, contractInfo);
+
+      const deploymentTime = Date.now() - startTime;
+
+      logger.info('COBOL smart contract deployed successfully', {
+        deploymentId,
+        contractAddress: contractInfo.address,
+        txHash: receipt.hash,
+        gasUsed: receipt.gasUsed.toString(),
+        deploymentTime
+      });
+
+      // Emit deployment event
+      this.emit('contractDeployed', {
+        deploymentId,
+        contractName: contractData.name,
+        address: contractInfo.address,
+        txHash: receipt.hash,
+        gasUsed: receipt.gasUsed.toString(),
+        deploymentTime,
+        networkType: this.networkType
+      });
+
+      return {
+        success: true,
+        deploymentId,
+        contractAddress: contractInfo.address,
+        transactionHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        gasUsed: receipt.gasUsed.toString(),
+        deploymentTime,
+        networkType: this.networkType,
+        contractInfo
+      };
+
+    } catch (error) {
+      const deploymentTime = Date.now() - startTime;
+      
+      logger.error('COBOL smart contract deployment failed', {
+        deploymentId,
+        contractName: contractData.name,
+        error: error.message,
+        deploymentTime
+      });
+
+      // Emit deployment failure event
+      this.emit('contractDeploymentFailed', {
+        deploymentId,
+        contractName: contractData.name,
+        error: error.message,
+        deploymentTime,
+        networkType: this.networkType
+      });
+
+      throw new Error(`Contract deployment failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Validate contract deployment requirements
+   * @param {Object} contractData - Contract data to validate
+   */
+  validateContractDeployment(contractData) {
+    if (!contractData) {
+      throw new Error('Contract data is required for deployment');
+    }
+
+    if (!contractData.name) {
+      throw new Error('Contract name is required');
+    }
+
+    if (!contractData.compiled) {
+      throw new Error('Compiled contract data is required');
+    }
+
+    if (!contractData.compiled.abi) {
+      throw new Error('Contract ABI is required');
+    }
+
+    if (!contractData.compiled.bytecode) {
+      throw new Error('Contract bytecode is required');
+    }
+
+    // Validate COBOL-specific metadata
+    if (contractData.metadata?.sourceType === 'cobol') {
+      if (!contractData.metadata.bankingSystem) {
+        throw new Error('Banking system is required for COBOL contracts');
+      }
+
+      if (!contractData.metadata.sourceProgram) {
+        throw new Error('Source COBOL program identifier is required');
+      }
+    }
+  }
+
+  /**
+   * Get deployment status for a contract
+   * @param {string} deploymentId - Deployment ID to check
+   * @returns {Promise<Object>} Deployment status
+   */
+  async getDeploymentStatus(deploymentId) {
+    try {
+      // Find contract by deployment ID
+      const contractEntry = Array.from(this.contracts.entries())
+        .find(([name, info]) => info.deploymentId === deploymentId);
+
+      if (!contractEntry) {
+        return {
+          status: 'not_found',
+          deploymentId,
+          message: 'Deployment not found'
+        };
+      }
+
+      const [contractName, contractInfo] = contractEntry;
+
+      // Check if deployment transaction is confirmed
+      if (contractInfo.deploymentTxHash) {
+        const receipt = await this.provider.getTransactionReceipt(contractInfo.deploymentTxHash);
+        
+        if (receipt) {
+          const currentBlock = await this.provider.getBlockNumber();
+          const confirmations = currentBlock - receipt.blockNumber;
+
+          return {
+            status: confirmations >= 12 ? 'confirmed' : 'pending_confirmation',
+            deploymentId,
+            contractName,
+            contractAddress: contractInfo.address,
+            transactionHash: contractInfo.deploymentTxHash,
+            blockNumber: receipt.blockNumber,
+            confirmations,
+            gasUsed: receipt.gasUsed.toString(),
+            metadata: contractInfo.metadata
+          };
+        }
+      }
+
+      return {
+        status: 'pending',
+        deploymentId,
+        contractName,
+        message: 'Deployment transaction pending'
+      };
+
+    } catch (error) {
+      logger.error('Failed to get deployment status', {
+        deploymentId,
+        error: error.message
+      });
+
+      return {
+        status: 'error',
+        deploymentId,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Get deployed contract information
+   * @param {string} contractName - Name of the deployed contract
+   * @returns {Object|null} Contract information
+   */
+  getDeployedContract(contractName) {
+    return this.contracts.get(contractName) || null;
+  }
+
+  /**
+   * List all deployed contracts
+   * @returns {Array} List of deployed contracts
+   */
+  listDeployedContracts() {
+    return Array.from(this.contracts.entries()).map(([name, info]) => ({
+      name,
+      address: info.address,
+      deploymentId: info.deploymentId,
+      deployedAt: info.metadata?.deployedAt,
+      bankingSystem: info.metadata?.bankingSystem,
+      sourceProgram: info.metadata?.sourceProgram
+    }));
+  }
+
+  /**
    * Cleanup resources
    */
   async cleanup() {
