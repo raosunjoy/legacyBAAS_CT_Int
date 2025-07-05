@@ -1,0 +1,540 @@
+# COBOL Transpiler Production Kubernetes Deployment
+# LegacyBaaS Platform - Production Ready Configuration
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: legacybaas-production
+  labels:
+    app: legacybaas
+    environment: production
+    version: "1.0.0"
+
+---
+# ConfigMap for COBOL Transpiler Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cobol-transpiler-config
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: config
+data:
+  NODE_ENV: "production"
+  LOG_LEVEL: "info"
+  METRICS_ENABLED: "true"
+  PROMETHEUS_PORT: "9090"
+  HEALTH_CHECK_PORT: "8080"
+  TRANSPILER_TIMEOUT: "300000"
+  MAX_CONCURRENT_JOBS: "50"
+  BATCH_SIZE: "10"
+  CACHE_TTL: "3600"
+  DATABASE_POOL_SIZE: "20"
+  REDIS_POOL_SIZE: "10"
+  BANKING_SYSTEMS: "fis-systematics,fiserv-dna,tcs-bancs,temenos-transact"
+  BLOCKCHAIN_NETWORKS: "ethereum,corda,algorand,xrp"
+  ENABLE_MONITORING: "true"
+  ENABLE_AUDIT_LOGGING: "true"
+  ENABLE_PERFORMANCE_OPTIMIZATION: "true"
+
+---
+# Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cobol-transpiler-secrets
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: secrets
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://cobol_user:secure_password@postgres-cluster.legacybaas-production.svc.cluster.local:5432/legacybaas_cobol"
+  REDIS_URL: "redis://redis-cluster.legacybaas-production.svc.cluster.local:6379"
+  JWT_SECRET: "ultra-secure-jwt-secret-for-production"
+  ENCRYPTION_KEY: "32-character-encryption-key-here"
+  BLOCKCHAIN_API_KEYS: |
+    {
+      "ethereum": "eth-api-key-here",
+      "corda": "corda-api-key-here",
+      "algorand": "algo-api-key-here",
+      "xrp": "xrp-api-key-here"
+    }
+  BANKING_API_CREDENTIALS: |
+    {
+      "fis-systematics": {
+        "username": "fis-username",
+        "password": "fis-password",
+        "endpoint": "https://api.fis.com"
+      },
+      "fiserv-dna": {
+        "username": "fiserv-username",
+        "password": "fiserv-password",
+        "endpoint": "https://api.fiserv.com"
+      },
+      "tcs-bancs": {
+        "username": "tcs-username",
+        "password": "tcs-password",
+        "endpoint": "https://api.tcs.com"
+      },
+      "temenos-transact": {
+        "username": "temenos-username",
+        "password": "temenos-password",
+        "endpoint": "https://api.temenos.com"
+      }
+    }
+
+---
+# Deployment for COBOL Transpiler Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cobol-transpiler
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: api
+    version: "1.0.0"
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: cobol-transpiler
+      component: api
+  template:
+    metadata:
+      labels:
+        app: cobol-transpiler
+        component: api
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: cobol-transpiler-service-account
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: cobol-transpiler
+        image: legacybaas/cobol-transpiler:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+        - containerPort: 9090
+          name: metrics
+          protocol: TCP
+        - containerPort: 8080
+          name: health
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: cobol-transpiler-config
+        - secretRef:
+            name: cobol-transpiler-secrets
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health/liveness
+            port: health
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health/readiness
+            port: health
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health/startup
+            port: health
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        volumeMounts:
+        - name: cobol-templates
+          mountPath: /app/templates
+          readOnly: true
+        - name: temp-storage
+          mountPath: /tmp
+        - name: logs
+          mountPath: /app/logs
+      - name: log-shipper
+        image: fluent/fluent-bit:1.9
+        ports:
+        - containerPort: 2020
+          name: http-fluent
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+          readOnly: true
+        - name: fluent-bit-config
+          mountPath: /fluent-bit/etc
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: cobol-templates
+        configMap:
+          name: cobol-templates
+      - name: temp-storage
+        emptyDir:
+          sizeLimit: "1Gi"
+      - name: logs
+        emptyDir:
+          sizeLimit: "500Mi"
+      - name: fluent-bit-config
+        configMap:
+          name: fluent-bit-config
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - cobol-transpiler
+              topologyKey: kubernetes.io/hostname
+      tolerations:
+      - key: "high-memory"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
+
+---
+# Service for COBOL Transpiler
+apiVersion: v1
+kind: Service
+metadata:
+  name: cobol-transpiler-service
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: service
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
+  selector:
+    app: cobol-transpiler
+    component: api
+
+---
+# ServiceAccount for COBOL Transpiler
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cobol-transpiler-service-account
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: serviceaccount
+
+---
+# ClusterRole for COBOL Transpiler
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cobol-transpiler-role
+  labels:
+    app: cobol-transpiler
+    component: rbac
+rules:
+- apiGroups: [""]
+  resources: ["pods", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["metrics.k8s.io"]
+  resources: ["pods", "nodes"]
+  verbs: ["get", "list"]
+
+---
+# ClusterRoleBinding for COBOL Transpiler
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cobol-transpiler-role-binding
+  labels:
+    app: cobol-transpiler
+    component: rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cobol-transpiler-role
+subjects:
+- kind: ServiceAccount
+  name: cobol-transpiler-service-account
+  namespace: legacybaas-production
+
+---
+# HorizontalPodAutoscaler for COBOL Transpiler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cobol-transpiler-hpa
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: autoscaling
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cobol-transpiler
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Pods
+    pods:
+      metric:
+        name: transpilation_queue_length
+      target:
+        type: AverageValue
+        averageValue: "10"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+
+---
+# PodDisruptionBudget for COBOL Transpiler
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cobol-transpiler-pdb
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: availability
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: cobol-transpiler
+      component: api
+
+---
+# NetworkPolicy for COBOL Transpiler
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cobol-transpiler-network-policy
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: cobol-transpiler
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: legacybaas-production
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 9090
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: legacybaas-production
+    ports:
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis
+  - to: []  # Allow outbound to internet for blockchain APIs
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+
+---
+# ConfigMap for COBOL Templates
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cobol-templates
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: templates
+data:
+  fis-payment-template.hbs: |
+    // FIS Systematics Payment Template
+    pragma solidity ^0.8.0;
+    
+    contract FISPaymentProcessor {
+        struct Payment {
+            address from;
+            address to;
+            uint256 amount;
+            string currency;
+            uint256 timestamp;
+        }
+        
+        mapping(uint256 => Payment) public payments;
+        uint256 public paymentCount;
+        
+        event PaymentProcessed(uint256 indexed paymentId, address from, address to, uint256 amount);
+        
+        function processPayment(address to, uint256 amount, string memory currency) public {
+            paymentCount++;
+            payments[paymentCount] = Payment(msg.sender, to, amount, currency, block.timestamp);
+            emit PaymentProcessed(paymentCount, msg.sender, to, amount);
+        }
+    }
+  
+  fiserv-dna-template.hbs: |
+    // Fiserv DNA Template
+    pragma solidity ^0.8.0;
+    
+    contract FiservDNAProcessor {
+        // Template implementation for Fiserv DNA
+    }
+  
+  tcs-bancs-template.hbs: |
+    // TCS BaNCS Template
+    pragma solidity ^0.8.0;
+    
+    contract TCSBaNCSProcessor {
+        // Template implementation for TCS BaNCS
+    }
+  
+  temenos-template.hbs: |
+    // Temenos T24 Template
+    pragma solidity ^0.8.0;
+    
+    contract TemenosT24Processor {
+        // Template implementation for Temenos T24
+    }
+
+---
+# ConfigMap for Fluent Bit logging
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: legacybaas-production
+  labels:
+    app: cobol-transpiler
+    component: logging
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         1
+        Log_Level     info
+        Daemon        off
+        Parsers_File  parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+
+    [INPUT]
+        Name              tail
+        Path              /app/logs/*.log
+        Parser            json
+        Tag               cobol.transpiler.*
+        Refresh_Interval  5
+
+    [OUTPUT]
+        Name  forward
+        Match *
+        Host  fluentd.logging.svc.cluster.local
+        Port  24224
+
+  parsers.conf: |
+    [PARSER]
+        Name        json
+        Format      json
+        Time_Key    timestamp
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+        Time_Keep   On

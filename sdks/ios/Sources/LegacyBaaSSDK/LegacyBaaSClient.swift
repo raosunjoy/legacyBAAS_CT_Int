@@ -64,6 +64,10 @@ import Security
     /// Webhook handler service
     public lazy var webhooks: WebhookService = WebhookService(client: self)
     
+    /// COBOL transpiler service
+    @available(iOS 13.0, *)
+    public lazy var cobol: CobolTranspilerService = CobolTranspilerService(httpClient: self.httpClient, baseURL: self.configuration.baseURL)
+    
     private let session: URLSession
     private let apiKeyManager: APIKeyManager
     private let monitor: NWPathMonitor

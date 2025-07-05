@@ -12,6 +12,7 @@ import { BlockchainRouter } from './services/blockchain';
 import { BancsIntegration } from './services/bancs';
 import { AnalyticsService } from './services/analytics';
 import { WebhookHandler } from './services/webhooks';
+import { CobolTranspilerService } from './services/cobol';
 
 import { ClientConfig, ApiResponse, HealthStatus } from './types/common';
 import { LegacyBaaSError } from './errors';
@@ -29,6 +30,7 @@ export class LegacyBaaSClient extends EventEmitter {
   public bancs: BancsIntegration;
   public analytics: AnalyticsService;
   public webhooks: WebhookHandler;
+  public cobol: CobolTranspilerService;
 
   constructor(
     private apiKey: string,
@@ -73,6 +75,7 @@ export class LegacyBaaSClient extends EventEmitter {
     this.bancs = new BancsIntegration(this.http);
     this.analytics = new AnalyticsService(this.http);
     this.webhooks = new WebhookHandler(this.http);
+    this.cobol = new CobolTranspilerService(this.http);
     
     // Auto-connect WebSocket if enabled
     if (config.enableRealTime) {

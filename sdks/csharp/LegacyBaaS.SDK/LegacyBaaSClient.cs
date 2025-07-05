@@ -17,6 +17,8 @@ namespace LegacyBaaS.SDK
 {
     /// <summary>
     /// Main LegacyBAAS client for C# SDK
+    /// Provides access to all platform services including SWIFT processing,
+    /// blockchain routing, BaNCS integration, analytics, and COBOL transpilation.
     /// </summary>
     public class LegacyBaaSClient : IDisposable
     {
@@ -43,6 +45,7 @@ namespace LegacyBaaS.SDK
         public AnalyticsService Analytics { get; }
         public WebhookHandler Webhooks { get; }
         public ComplianceService Compliance { get; }
+        public CobolTranspilerService Cobol { get; }
         
         /// <summary>
         /// Constructor
@@ -81,6 +84,7 @@ namespace LegacyBaaS.SDK
             Analytics = new AnalyticsService(this);
             Webhooks = new WebhookHandler(this);
             Compliance = new ComplianceService(this);
+            Cobol = new CobolTranspilerService(_httpClient, _baseUrl);
             
             _logger?.Info($"LegacyBAAS Client initialized - Environment: {_environment}, Base URL: {_baseUrl}");
         }
@@ -272,6 +276,7 @@ namespace LegacyBaaS.SDK
         /// </summary>
         public void Dispose()
         {
+            Cobol?.Dispose();
             _httpClient?.Dispose();
             _accessToken = null;
             _tokenExpiry = DateTime.MinValue;

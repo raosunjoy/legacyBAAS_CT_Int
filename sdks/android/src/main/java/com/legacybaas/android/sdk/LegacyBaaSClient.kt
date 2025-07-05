@@ -105,6 +105,11 @@ class LegacyBaaSClient @JvmOverloads constructor(
      */
     val webhooks: WebhookService by lazy { WebhookService(this) }
     
+    /**
+     * COBOL transpiler service
+     */
+    val cobol: CobolTranspilerService by lazy { CobolTranspilerService(this) }
+    
     init {
         require(ApiKeyValidator.isValid(apiKey)) { "Invalid API key format" }
         

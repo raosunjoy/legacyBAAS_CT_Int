@@ -18,6 +18,7 @@ import com.legacybaas.services.BlockchainRouter;
 import com.legacybaas.services.BancsIntegration;
 import com.legacybaas.services.AnalyticsService;
 import com.legacybaas.services.WebhookHandler;
+import com.legacybaas.services.CobolTranspilerService;
 import com.legacybaas.utils.ApiKeyValidator;
 
 import org.jetbrains.annotations.NotNull;
@@ -34,7 +35,7 @@ import java.util.concurrent.CompletableFuture;
  * Main Legacy B2BaaS Platform Client for Java
  * 
  * <p>Provides access to all platform services including SWIFT processing,
- * blockchain routing, BaNCS integration, and analytics.</p>
+ * blockchain routing, BaNCS integration, analytics, and COBOL transpilation.</p>
  * 
  * <p>Example usage:</p>
  * <pre>{@code
@@ -66,6 +67,17 @@ import java.util.concurrent.CompletableFuture;
  * SwiftProcessingResult result = client.swift().processMT103(mt103).get();
  * System.out.println("Transaction ID: " + result.getTransactionId());
  * 
+ * // Transpile COBOL code to Solidity
+ * CobolTranspileRequest cobolRequest = CobolTranspileRequest.builder()
+ *     .sourceCode("IDENTIFICATION DIVISION. PROGRAM-ID. SAMPLE.")
+ *     .targetLanguage(TargetLanguage.SOLIDITY)
+ *     .bankingSystem(BankingSystem.FIS_SYSTEMATICS)
+ *     .blockchainNetwork(BlockchainNetwork.ETHEREUM)
+ *     .build();
+ * 
+ * CobolTranspileResult cobolResult = client.cobol().transpile(cobolRequest);
+ * System.out.println("Contract Address: " + cobolResult.getContractAddress());
+ * 
  * // Close client when done
  * client.close();
  * }</pre>
@@ -90,6 +102,7 @@ public class LegacyBaaSClient implements Closeable {
     private final BancsIntegration bancsIntegration;
     private final AnalyticsService analyticsService;
     private final WebhookHandler webhookHandler;
+    private final CobolTranspilerService cobolTranspilerService;
     
     /**
      * Constructs a new Legacy B2BaaS client
@@ -129,6 +142,7 @@ public class LegacyBaaSClient implements Closeable {
         this.bancsIntegration = new BancsIntegration(httpClient);
         this.analyticsService = new AnalyticsService(httpClient);
         this.webhookHandler = new WebhookHandler(httpClient);
+        this.cobolTranspilerService = new CobolTranspilerService(httpClient.getOkHttpClient(), config.getBaseUrl());
         
         logger.info("Legacy B2BaaS Client initialized for environment: {}", config.getEnvironment());
     }
@@ -185,6 +199,15 @@ public class LegacyBaaSClient implements Closeable {
      */
     public WebhookHandler webhooks() {
         return webhookHandler;
+    }
+    
+    /**
+     * Get COBOL transpiler service
+     * 
+     * @return COBOL transpiler service instance
+     */
+    public CobolTranspilerService cobol() {
+        return cobolTranspilerService;
     }
     
     /**
@@ -257,6 +280,9 @@ public class LegacyBaaSClient implements Closeable {
     @Override
     public void close() {
         try {
+            if (cobolTranspilerService != null) {
+                cobolTranspilerService.close();
+            }
             if (httpClient != null) {
                 httpClient.close();
             }

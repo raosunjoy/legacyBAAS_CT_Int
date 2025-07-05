@@ -24,6 +24,7 @@ from .services.banking_service import BankingService
 from .services.analytics_service import AnalyticsService
 from .services.webhook_handler import WebhookHandler
 from .services.compliance_service import ComplianceService
+from .services.cobol_service import CobolTranspilerService
 from .utils import Logger
 
 
@@ -94,6 +95,7 @@ class LegacyBaaSClient:
         self.analytics = AnalyticsService(self)
         self.webhooks = WebhookHandler(self)
         self.compliance = ComplianceService(self)
+        self.cobol = CobolTranspilerService(self)
         
         if self.logger:
             self.logger.info(f"LegacyBAAS Client initialized - Environment: {environment}, Base URL: {self.base_url}")
