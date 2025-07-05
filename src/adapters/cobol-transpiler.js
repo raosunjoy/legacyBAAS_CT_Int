@@ -15,6 +15,7 @@ const yaml = require('js-yaml');
 const path = require('path');
 const fs = require('fs');
 const { AuthManager, PERMISSIONS } = require('../auth/auth-middleware');
+const { ZKProofComplianceService } = require('../compliance/zk-proof-compliance');
 
 // Configure logger following existing pattern
 const logger = winston.createLogger({
@@ -80,6 +81,17 @@ class CobolTranspiler {
     this.config = this._loadDefaultConfig(config);
     this.templates = new Map();
     this.authManager = new AuthManager(config.auth || {});
+    
+    // Initialize compliance service with enhanced config for COBOL contracts
+    this.complianceService = new ZKProofComplianceService({
+      enabledChecks: ['anti_money_laundering', 'sanctions_screening', 'financial_action_task_force'],
+      enableBatchProofs: true,
+      proofCaching: true,
+      enableFullPrivacy: true,
+      zkFramework: config.zkFramework || 'zokrates',
+      ...config.compliance
+    });
+    
     this.metrics = {
       totalTranspilations: 0,
       successfulTranspilations: 0,
@@ -87,12 +99,15 @@ class CobolTranspiler {
       averageTranspilationTime: 0,
       lastTranspilationTime: null,
       authenticationAttempts: 0,
-      authenticationFailures: 0
+      authenticationFailures: 0,
+      complianceChecks: 0,
+      complianceFailures: 0
     };
     
     logger.info('CobolTranspiler initialized', { 
       config: this.config.name || 'default',
       authEnabled: !!this.authManager,
+      complianceEnabled: !!this.complianceService,
       timestamp: new Date().toISOString()
     });
   }
@@ -654,6 +669,432 @@ class CobolTranspiler {
     }
 
     return headers;
+  }
+
+  /**
+   * Perform compliance screening on transpiled smart contracts
+   * Integrates with existing ZK-proof compliance engine
+   * @param {Object} contractData - Generated contract data
+   * @param {Object} transactionData - Transaction details from COBOL program
+   * @param {Object} customerData - Customer information for compliance
+   * @returns {Object} Compliance screening result with risk assessment
+   */
+  async performComplianceScreening(contractData, transactionData, customerData) {
+    const startTime = Date.now();
+    this.metrics.complianceChecks++;
+
+    try {
+      logger.info('Starting compliance screening for COBOL-generated contract', {
+        contractId: contractData.metadata?.contractId || uuidv4(),
+        blockchain: contractData.blockchain,
+        programId: contractData.metadata?.transpiler?.programId,
+        transactionAmount: transactionData.amount,
+        currency: transactionData.currency
+      });
+
+      // Determine required compliance checks based on transaction characteristics
+      const requiredChecks = this._determineRequiredChecks(transactionData, contractData);
+
+      // Prepare compliance data with COBOL-specific context
+      const complianceData = {
+        ...transactionData,
+        contractDetails: {
+          blockchain: contractData.blockchain,
+          contractType: 'cobol_transpiled',
+          sourceSystem: this.config.bankingSystem,
+          programId: contractData.metadata?.transpiler?.programId
+        }
+      };
+
+      // Perform compliance check using ZK-proof service
+      const complianceResult = await this.complianceService.performComplianceCheck(
+        complianceData,
+        customerData,
+        requiredChecks
+      );
+
+      // Enhance result with COBOL-specific risk scoring
+      const enhancedResult = this._enhanceComplianceResult(complianceResult, contractData);
+
+      // Log compliance outcome
+      logger.info('Compliance screening completed', {
+        contractId: contractData.metadata?.contractId,
+        overallStatus: enhancedResult.overallStatus,
+        riskScore: enhancedResult.riskScore,
+        riskLevel: enhancedResult.riskLevel,
+        checksPassed: enhancedResult.checkResults.filter(r => r.passed).length,
+        totalChecks: enhancedResult.checkResults.length,
+        screeningTime: Date.now() - startTime
+      });
+
+      return enhancedResult;
+
+    } catch (error) {
+      this.metrics.complianceFailures++;
+      logger.error('Compliance screening failed', {
+        contractId: contractData.metadata?.contractId,
+        error: error.message,
+        screeningTime: Date.now() - startTime
+      });
+      throw new Error(`Compliance screening failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Check if transaction requires FATF Travel Rule compliance
+   * @param {Object} transactionData - Transaction details
+   * @returns {boolean} True if Travel Rule applies
+   */
+  checkFATFTravelRuleRequired(transactionData) {
+    const FATF_THRESHOLD = 3000; // USD equivalent
+    
+    if (!transactionData.amount || !transactionData.currency) {
+      return false;
+    }
+
+    // Convert to USD equivalent (simplified - in production would use real FX rates)
+    const usdEquivalent = this._convertToUSD(transactionData.amount, transactionData.currency);
+    
+    const required = usdEquivalent >= FATF_THRESHOLD;
+    
+    logger.debug('FATF Travel Rule check', {
+      amount: transactionData.amount,
+      currency: transactionData.currency,
+      usdEquivalent,
+      threshold: FATF_THRESHOLD,
+      required
+    });
+
+    return required;
+  }
+
+  /**
+   * Calculate risk score for COBOL-generated contracts
+   * @param {Object} contractData - Generated contract data
+   * @param {Object} transactionData - Transaction details
+   * @returns {Object} Risk score and contributing factors
+   */
+  calculateContractRiskScore(contractData, transactionData) {
+    const factors = [];
+    let baseScore = 0;
+
+    // Factor 1: Transaction amount risk
+    const amountRisk = this._calculateAmountRisk(transactionData);
+    baseScore += amountRisk.score * 0.3;
+    factors.push(amountRisk);
+
+    // Factor 2: Blockchain risk (some chains have higher risk profiles)
+    const blockchainRisk = this._calculateBlockchainRisk(contractData.blockchain);
+    baseScore += blockchainRisk.score * 0.2;
+    factors.push(blockchainRisk);
+
+    // Factor 3: Banking system risk (legacy systems may have higher risk)
+    const systemRisk = this._calculateBankingSystemRisk(this.config.bankingSystem);
+    baseScore += systemRisk.score * 0.2;
+    factors.push(systemRisk);
+
+    // Factor 4: Contract complexity risk
+    const complexityRisk = this._calculateComplexityRisk(contractData);
+    baseScore += complexityRisk.score * 0.3;
+    factors.push(complexityRisk);
+
+    // Normalize score to 0-1 range
+    const normalizedScore = Math.min(1, Math.max(0, baseScore));
+    
+    // Determine risk level
+    let riskLevel;
+    if (normalizedScore < 0.3) riskLevel = 'low';
+    else if (normalizedScore < 0.6) riskLevel = 'medium';
+    else if (normalizedScore < 0.8) riskLevel = 'high';
+    else riskLevel = 'critical';
+
+    const result = {
+      score: normalizedScore,
+      level: riskLevel,
+      factors,
+      timestamp: new Date().toISOString(),
+      contractId: contractData.metadata?.contractId
+    };
+
+    logger.info('Contract risk score calculated', result);
+
+    return result;
+  }
+
+  /**
+   * Perform AML/KYC screening for COBOL transactions
+   * @param {Object} customerData - Customer information
+   * @param {Object} transactionData - Transaction details
+   * @returns {Object} AML/KYC screening result
+   */
+  async performAMLKYCScreening(customerData, transactionData) {
+    logger.info('Performing AML/KYC screening for COBOL transaction', {
+      customerId: customerData.customerId,
+      transactionType: transactionData.type,
+      amount: transactionData.amount
+    });
+
+    // Use the compliance service's built-in AML/KYC checks
+    const screeningResult = await this.complianceService.performComplianceCheck(
+      transactionData,
+      customerData,
+      ['anti_money_laundering', 'know_your_customer']
+    );
+
+    return {
+      passed: screeningResult.overallStatus === 'passed',
+      riskScore: screeningResult.riskScore,
+      riskLevel: screeningResult.riskLevel,
+      checkResults: screeningResult.checkResults.filter(r => 
+        r.checkType === 'anti_money_laundering' || r.checkType === 'know_your_customer'
+      ),
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Perform sanctions screening for parties involved
+   * @param {Array} parties - Array of party objects to screen
+   * @returns {Object} Sanctions screening result
+   */
+  async performSanctionsScreening(parties) {
+    logger.info('Performing sanctions screening', {
+      partyCount: parties.length
+    });
+
+    const screeningResults = [];
+
+    for (const party of parties) {
+      const result = await this.complianceService.performComplianceCheck(
+        { partyInfo: party },
+        party,
+        ['sanctions_screening']
+      );
+
+      screeningResults.push({
+        partyId: party.id || party.customerId,
+        partyName: party.name,
+        passed: result.overallStatus === 'passed',
+        matchFound: result.checkResults.some(r => 
+          r.checkType === 'sanctions_screening' && !r.passed
+        ),
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return {
+      overallPassed: screeningResults.every(r => r.passed),
+      screeningResults,
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Determine required compliance checks based on transaction
+   * @private
+   */
+  _determineRequiredChecks(transactionData, contractData) {
+    const checks = ['anti_money_laundering', 'sanctions_screening'];
+
+    // Add FATF check for cross-border or high-value transactions
+    if (this.checkFATFTravelRuleRequired(transactionData)) {
+      checks.push('financial_action_task_force');
+    }
+
+    // Add enhanced due diligence for high-risk transactions
+    const riskScore = this.calculateContractRiskScore(contractData, transactionData);
+    if (riskScore.level === 'high' || riskScore.level === 'critical') {
+      checks.push('enhanced_due_diligence');
+    }
+
+    // Add PEP screening for certain transaction types
+    if (transactionData.type === 'wire_transfer' || transactionData.type === 'international') {
+      checks.push('politically_exposed_person');
+    }
+
+    return checks;
+  }
+
+  /**
+   * Enhance compliance result with COBOL-specific context
+   * @private
+   */
+  _enhanceComplianceResult(complianceResult, contractData) {
+    return {
+      ...complianceResult,
+      cobolContext: {
+        sourceProgram: contractData.metadata?.transpiler?.programId,
+        bankingSystem: this.config.bankingSystem,
+        targetBlockchain: contractData.blockchain,
+        transpilationId: contractData.metadata?.transpiler?.transpilationId
+      },
+      recommendations: this._generateComplianceRecommendations(complianceResult, contractData)
+    };
+  }
+
+  /**
+   * Generate compliance recommendations based on results
+   * @private
+   */
+  _generateComplianceRecommendations(complianceResult, contractData) {
+    const recommendations = [];
+
+    if (complianceResult.riskLevel === 'high' || complianceResult.riskLevel === 'critical') {
+      recommendations.push({
+        type: 'manual_review',
+        priority: 'high',
+        description: 'High-risk transaction requires manual compliance review before blockchain deployment'
+      });
+    }
+
+    if (complianceResult.checkResults.some(r => r.checkType === 'financial_action_task_force' && r.passed)) {
+      recommendations.push({
+        type: 'travel_rule_compliance',
+        priority: 'medium',
+        description: 'Ensure Travel Rule information is included in blockchain transaction metadata'
+      });
+    }
+
+    if (contractData.blockchain === 'ethereum' && complianceResult.riskScore > 0.7) {
+      recommendations.push({
+        type: 'enhanced_monitoring',
+        priority: 'medium',
+        description: 'Enable enhanced on-chain monitoring for this high-risk Ethereum contract'
+      });
+    }
+
+    return recommendations;
+  }
+
+  /**
+   * Calculate amount-based risk score
+   * @private
+   */
+  _calculateAmountRisk(transactionData) {
+    const amount = transactionData.amount || 0;
+    const usdAmount = this._convertToUSD(amount, transactionData.currency);
+    
+    let score = 0;
+    if (usdAmount < 10000) score = 0.1;
+    else if (usdAmount < 50000) score = 0.3;
+    else if (usdAmount < 100000) score = 0.5;
+    else if (usdAmount < 500000) score = 0.7;
+    else score = 0.9;
+
+    return {
+      factor: 'transaction_amount',
+      score,
+      details: `Transaction amount: ${amount} ${transactionData.currency} (~${usdAmount} USD)`
+    };
+  }
+
+  /**
+   * Calculate blockchain-specific risk score
+   * @private
+   */
+  _calculateBlockchainRisk(blockchain) {
+    const riskScores = {
+      'ethereum': 0.3,        // Mature, well-monitored
+      'corda': 0.2,          // Enterprise-focused, permissioned
+      'hyperledger': 0.2,    // Enterprise-focused, permissioned
+      'xrp': 0.4,            // Some regulatory concerns
+      'algorand': 0.3,       // Growing adoption, good compliance
+      'stellar': 0.4,        // Cross-border focus adds some risk
+      'unknown': 0.8         // Unknown chains are high risk
+    };
+
+    const score = riskScores[blockchain.toLowerCase()] || riskScores.unknown;
+
+    return {
+      factor: 'blockchain_platform',
+      score,
+      details: `Target blockchain: ${blockchain}`
+    };
+  }
+
+  /**
+   * Calculate banking system risk score
+   * @private
+   */
+  _calculateBankingSystemRisk(bankingSystem) {
+    const riskScores = {
+      'FIS_SYSTEMATICS': 0.4,    // Legacy mainframe, moderate risk
+      'FISERV_DNA': 0.3,         // Modern APIs, lower risk
+      'TEMENOS_TRANSACT': 0.3,   // Good compliance features
+      'TCS_BANCS': 0.3,          // Universal banking, good controls
+      'unknown': 0.6             // Unknown systems are higher risk
+    };
+
+    const score = riskScores[bankingSystem] || riskScores.unknown;
+
+    return {
+      factor: 'banking_system',
+      score,
+      details: `Source banking system: ${bankingSystem}`
+    };
+  }
+
+  /**
+   * Calculate contract complexity risk score
+   * @private
+   */
+  _calculateComplexityRisk(contractData) {
+    let score = 0.2; // Base complexity score
+
+    // Increase score based on contract size
+    const contractSize = contractData.contractCode?.length || 0;
+    if (contractSize > 10000) score += 0.2;
+    if (contractSize > 50000) score += 0.2;
+
+    // Increase score based on number of functions
+    const functionCount = (contractData.contractCode?.match(/function\s+\w+/g) || []).length;
+    if (functionCount > 10) score += 0.1;
+    if (functionCount > 20) score += 0.1;
+
+    // Cap at 1.0
+    score = Math.min(1.0, score);
+
+    return {
+      factor: 'contract_complexity',
+      score,
+      details: `Contract size: ${contractSize} bytes, Functions: ${functionCount}`
+    };
+  }
+
+  /**
+   * Convert amount to USD equivalent (simplified)
+   * @private
+   */
+  _convertToUSD(amount, currency) {
+    // Simplified FX rates - in production would use real-time rates
+    const rates = {
+      'USD': 1.0,
+      'EUR': 1.1,
+      'GBP': 1.3,
+      'JPY': 0.0067,
+      'CHF': 1.1,
+      'CAD': 0.75,
+      'AUD': 0.65
+    };
+
+    const rate = rates[currency] || 1.0;
+    return amount * rate;
+  }
+
+  /**
+   * Get enhanced metrics including compliance metrics
+   */
+  getMetrics() {
+    return {
+      ...this.metrics,
+      successRate: this.metrics.totalTranspilations > 0 ? 
+        (this.metrics.successfulTranspilations / this.metrics.totalTranspilations) * 100 : 0,
+      authSuccessRate: this.metrics.authenticationAttempts > 0 ?
+        ((this.metrics.authenticationAttempts - this.metrics.authenticationFailures) / this.metrics.authenticationAttempts) * 100 : 100,
+      complianceSuccessRate: this.metrics.complianceChecks > 0 ?
+        ((this.metrics.complianceChecks - this.metrics.complianceFailures) / this.metrics.complianceChecks) * 100 : 100,
+      timestamp: new Date().toISOString()
+    };
   }
 }
 

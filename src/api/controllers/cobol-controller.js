@@ -412,45 +412,208 @@ class CobolController {
 
   /**
    * Perform compliance checks on AST
+   * Enhanced with ZK-proof compliance engine integration
    */
   async performComplianceChecks(ast, config, userContext) {
     const complianceResults = {
       checks: [],
       warnings: [],
-      errors: []
+      errors: [],
+      zkProofResults: null,
+      riskAssessment: null,
+      recommendations: []
     };
 
-    // Check for sensitive data patterns
+    try {
+      // Get transpiler instance to access compliance methods
+      const transpiler = await this.getTranspilerInstance(config);
+
+      // Prepare transaction data from AST
+      const transactionData = this.extractTransactionData(ast);
+      
+      // Prepare customer data from user context
+      const customerData = {
+        customerId: userContext.customerId,
+        userId: userContext.userId,
+        name: userContext.customerName || 'Unknown',
+        countryCode: userContext.countryCode || 'US',
+        customerType: userContext.customerType || 'retail'
+      };
+
+      // Prepare contract data for compliance
+      const contractData = {
+        metadata: {
+          contractId: ast.id,
+          transpiler: {
+            programId: ast.program.programId
+          }
+        },
+        blockchain: config.targetBlockchain
+      };
+
+      // Perform AML/KYC screening
+      const amlKycResult = await transpiler.performAMLKYCScreening(customerData, transactionData);
+      if (!amlKycResult.passed) {
+        complianceResults.errors.push(`AML/KYC screening failed: Risk level ${amlKycResult.riskLevel}`);
+      } else {
+        complianceResults.checks.push(`AML/KYC screening passed with risk level: ${amlKycResult.riskLevel}`);
+      }
+
+      // Check FATF Travel Rule requirement
+      if (transpiler.checkFATFTravelRuleRequired(transactionData)) {
+        complianceResults.warnings.push('FATF Travel Rule applies - additional information required for amounts >$3,000');
+        complianceResults.recommendations.push({
+          type: 'travel_rule',
+          description: 'Include originator and beneficiary information in transaction metadata'
+        });
+      }
+
+      // Perform sanctions screening if parties are identified
+      const parties = this.extractParties(ast);
+      if (parties.length > 0) {
+        const sanctionsResult = await transpiler.performSanctionsScreening(parties);
+        if (!sanctionsResult.overallPassed) {
+          complianceResults.errors.push('Sanctions screening failed - one or more parties matched sanctions lists');
+        } else {
+          complianceResults.checks.push('Sanctions screening passed for all parties');
+        }
+      }
+
+      // Calculate risk score for the contract
+      const riskScore = transpiler.calculateContractRiskScore(contractData, transactionData);
+      complianceResults.riskAssessment = riskScore;
+      
+      if (riskScore.level === 'high' || riskScore.level === 'critical') {
+        complianceResults.warnings.push(`High risk score detected: ${riskScore.score.toFixed(2)} (${riskScore.level})`);
+      }
+
+      // Perform comprehensive compliance screening with ZK-proofs
+      const zkComplianceResult = await transpiler.performComplianceScreening(
+        contractData,
+        transactionData,
+        customerData
+      );
+      
+      complianceResults.zkProofResults = {
+        overallStatus: zkComplianceResult.overallStatus,
+        riskScore: zkComplianceResult.riskScore,
+        riskLevel: zkComplianceResult.riskLevel,
+        checksPerformed: zkComplianceResult.checkResults.length,
+        checksPassed: zkComplianceResult.checkResults.filter(r => r.passed).length
+      };
+
+      // Add recommendations from ZK compliance
+      if (zkComplianceResult.recommendations) {
+        complianceResults.recommendations.push(...zkComplianceResult.recommendations);
+      }
+
+      // Original sensitive data checks (maintained for backward compatibility)
+      ast.data.variables.forEach(variable => {
+        if (variable.name.includes('ssn') || variable.name.includes('social_security')) {
+          complianceResults.warnings.push(`Sensitive data detected: ${variable.name}`);
+        }
+        
+        if (variable.name.includes('account') && !variable.name.includes('number')) {
+          complianceResults.checks.push(`Account data field: ${variable.name}`);
+        }
+      });
+
+      // Check operation compliance
+      ast.procedure.operations.forEach(operation => {
+        if (operation.type === 'compute' && operation.expression.includes('INTEREST')) {
+          complianceResults.checks.push('Interest calculation detected - requires regulatory validation');
+        }
+      });
+
+      logger.info('Enhanced compliance checks completed', {
+        programId: ast.program.programId,
+        userId: userContext.userId,
+        checksCount: complianceResults.checks.length,
+        warningsCount: complianceResults.warnings.length,
+        errorsCount: complianceResults.errors.length,
+        zkProofStatus: complianceResults.zkProofResults?.overallStatus,
+        riskLevel: complianceResults.riskAssessment?.level
+      });
+
+      if (complianceResults.errors.length > 0) {
+        throw new Error(`Compliance validation failed: ${complianceResults.errors.join(', ')}`);
+      }
+
+      return complianceResults;
+
+    } catch (error) {
+      logger.error('Compliance check failed', {
+        programId: ast.program.programId,
+        error: error.message
+      });
+      complianceResults.errors.push(`Compliance engine error: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Extract transaction data from AST for compliance
+   * @private
+   */
+  extractTransactionData(ast) {
+    const transactionData = {
+      amount: 0,
+      currency: 'USD',
+      type: 'unknown',
+      description: ast.program.programId || 'COBOL Transaction'
+    };
+
+    // Try to extract amount from variables or operations
     ast.data.variables.forEach(variable => {
-      if (variable.name.includes('ssn') || variable.name.includes('social_security')) {
-        complianceResults.warnings.push(`Sensitive data detected: ${variable.name}`);
+      if (variable.name.toLowerCase().includes('amount') || 
+          variable.name.toLowerCase().includes('total')) {
+        // Extract numeric value if available
+        const match = variable.value?.match(/[\d,]+\.?\d*/);
+        if (match) {
+          transactionData.amount = parseFloat(match[0].replace(/,/g, ''));
+        }
       }
       
-      if (variable.name.includes('account') && !variable.name.includes('number')) {
-        complianceResults.checks.push(`Account data field: ${variable.name}`);
+      if (variable.name.toLowerCase().includes('currency')) {
+        transactionData.currency = variable.value || 'USD';
       }
     });
 
-    // Check operation compliance
-    ast.procedure.operations.forEach(operation => {
-      if (operation.type === 'compute' && operation.expression.includes('INTEREST')) {
-        complianceResults.checks.push('Interest calculation detected - requires regulatory validation');
-      }
-    });
-
-    logger.info('Compliance checks completed', {
-      programId: ast.program.programId,
-      userId: userContext.userId,
-      checksCount: complianceResults.checks.length,
-      warningsCount: complianceResults.warnings.length,
-      errorsCount: complianceResults.errors.length
-    });
-
-    if (complianceResults.errors.length > 0) {
-      throw new Error(`Compliance validation failed: ${complianceResults.errors.join(', ')}`);
+    // Determine transaction type from operations
+    const hasTransfer = ast.procedure.operations.some(op => 
+      op.expression?.toLowerCase().includes('transfer') ||
+      op.expression?.toLowerCase().includes('payment')
+    );
+    
+    if (hasTransfer) {
+      transactionData.type = 'wire_transfer';
+    } else if (ast.program.programId?.toLowerCase().includes('loan')) {
+      transactionData.type = 'loan_processing';
     }
 
-    return complianceResults;
+    return transactionData;
+  }
+
+  /**
+   * Extract parties from AST for sanctions screening
+   * @private
+   */
+  extractParties(ast) {
+    const parties = [];
+    
+    ast.data.variables.forEach(variable => {
+      if (variable.name.toLowerCase().includes('customer_name') ||
+          variable.name.toLowerCase().includes('beneficiary') ||
+          variable.name.toLowerCase().includes('originator')) {
+        parties.push({
+          id: variable.name,
+          name: variable.value || 'Unknown',
+          type: variable.name.toLowerCase().includes('beneficiary') ? 'beneficiary' : 'originator'
+        });
+      }
+    });
+
+    return parties;
   }
 
   /**
