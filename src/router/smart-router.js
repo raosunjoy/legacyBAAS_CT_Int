@@ -38,7 +38,8 @@ const TRANSACTION_TYPES = {
   TRADE_FINANCE: 'trade_finance',
   TOKENIZED_DEPOSIT: 'tokenized_deposit',
   CBDC_TRANSFER: 'cbdc_transfer',
-  COMPLIANCE_CHECK: 'compliance_check'
+  COMPLIANCE_CHECK: 'compliance_check',
+  COBOL_CONTRACT: 'cobol_contract' // New: COBOL-generated smart contracts
 };
 
 /**
@@ -51,7 +52,47 @@ const ROUTING_FACTORS = {
   NETWORK_CONGESTION: 'network_congestion',
   COST_OPTIMIZATION: 'cost_optimization',
   SPEED_REQUIREMENT: 'speed_requirement',
-  BANK_PREFERENCE: 'bank_preference'
+  BANK_PREFERENCE: 'bank_preference',
+  COBOL_COMPLEXITY: 'cobol_complexity', // New: COBOL logic complexity
+  BANKING_SYSTEM: 'banking_system', // New: Source banking system
+  CONTRACT_SIZE: 'contract_size' // New: Generated contract size
+};
+
+/**
+ * Banking System Routing Preferences
+ * Maps banking systems to preferred blockchain networks
+ */
+const BANKING_SYSTEM_PREFERENCES = {
+  FIS_SYSTEMATICS: {
+    primary: BLOCKCHAIN_NETWORKS.CORDA, // Enterprise-focused, private
+    secondary: BLOCKCHAIN_NETWORKS.ETHEREUM_L2, // Cost-effective alternative
+    reason: 'Legacy mainframe integration works best with enterprise blockchains'
+  },
+  FISERV_DNA: {
+    primary: BLOCKCHAIN_NETWORKS.XRP, // Fast settlement for modern API-based systems
+    secondary: BLOCKCHAIN_NETWORKS.ALGORAND, // High throughput for real-time systems
+    reason: 'Modern API-based system benefits from high-speed networks'
+  },
+  TEMENOS_TRANSACT: {
+    primary: BLOCKCHAIN_NETWORKS.CORDA, // European compliance focus
+    secondary: BLOCKCHAIN_NETWORKS.ETHEREUM_L2, // SEPA compatibility
+    reason: 'European banking standards align with enterprise blockchain features'
+  },
+  TCS_BANCS: {
+    primary: BLOCKCHAIN_NETWORKS.ALGORAND, // Global deployment scalability
+    secondary: BLOCKCHAIN_NETWORKS.XRP, // Universal banking operations
+    reason: 'Universal banking platform needs globally scalable blockchain'
+  }
+};
+
+/**
+ * COBOL Complexity Scoring Thresholds
+ */
+const COMPLEXITY_THRESHOLDS = {
+  LOW: 0.3,        // Simple COBOL programs
+  MEDIUM: 0.6,     // Moderate complexity
+  HIGH: 0.8,       // Complex business logic
+  CRITICAL: 1.0    // Very complex, requires specialized handling
 };
 
 /**
@@ -203,10 +244,24 @@ class SmartRouter extends EventEmitter {
       throw new Error('Transaction currency is required');
     }
 
-    // Validate supported message types
-    const supportedTypes = ['MT103', 'MT202'];
-    if (!supportedTypes.includes(transaction.messageType)) {
+    // Validate supported message types and COBOL contracts
+    const supportedTypes = ['MT103', 'MT202', 'COBOL_CONTRACT'];
+    if (!supportedTypes.includes(transaction.messageType) && 
+        !transaction.cobolContract) {
       throw new Error(`Unsupported message type: ${transaction.messageType}`);
+    }
+
+    // Additional validation for COBOL contracts
+    if (transaction.messageType === 'COBOL_CONTRACT' || transaction.cobolContract) {
+      if (!transaction.cobolContract) {
+        throw new Error('COBOL contract data is required for COBOL transactions');
+      }
+      if (!transaction.cobolContract.programId) {
+        throw new Error('COBOL program ID is required');
+      }
+      if (!transaction.cobolContract.bankingSystem) {
+        throw new Error('Banking system is required for COBOL contracts');
+      }
     }
   }
 
@@ -244,6 +299,11 @@ class SmartRouter extends EventEmitter {
       bankPreferences: context.bankPreferences || {}
     };
 
+    // Add COBOL-specific factors if this is a COBOL contract
+    if (transaction.cobolContract) {
+      factors.cobolFactors = await this.analyzeCobolFactors(transaction, context);
+    }
+
     return factors;
   }
 
@@ -255,6 +315,12 @@ class SmartRouter extends EventEmitter {
    */
   async applyRoutingRules(transaction, factors) {
     const decisions = [];
+
+    // Rule 0: COBOL-specific routing (highest priority)
+    if (transaction.cobolContract) {
+      const cobolDecision = this.applyCobolRoutingRules(transaction, factors);
+      if (cobolDecision) decisions.push(cobolDecision);
+    }
 
     // Rule 1: Currency-based routing
     const currencyDecision = this.applyCurrencyRules(transaction, factors);
@@ -448,6 +514,301 @@ class SmartRouter extends EventEmitter {
   }
 
   /**
+   * Analyze COBOL-specific factors for routing
+   * @param {Object} transaction - Transaction with COBOL contract
+   * @param {Object} context - Additional context
+   * @returns {Promise<Object>} COBOL-specific routing factors
+   */
+  async analyzeCobolFactors(transaction, context) {
+    const cobolContract = transaction.cobolContract;
+    
+    return {
+      // Banking system information
+      bankingSystem: cobolContract.bankingSystem,
+      programId: cobolContract.programId,
+      
+      // Calculate COBOL complexity score
+      complexityScore: this.calculateCobolComplexity(cobolContract),
+      
+      // Analyze contract characteristics
+      contractSize: cobolContract.contractCode ? cobolContract.contractCode.length : 0,
+      blockchain: cobolContract.targetBlockchain,
+      
+      // Banking system preferences
+      bankingSystemPreference: BANKING_SYSTEM_PREFERENCES[cobolContract.bankingSystem],
+      
+      // Gas estimation and cost factors
+      gasEstimate: cobolContract.gasEstimate || 0,
+      deploymentComplexity: this.assessDeploymentComplexity(cobolContract),
+      
+      // Risk assessment from compliance
+      riskLevel: cobolContract.riskAssessment?.level || 'medium',
+      complianceScore: cobolContract.complianceScore || 0.5
+    };
+  }
+
+  /**
+   * Calculate COBOL logic complexity score
+   * @param {Object} cobolContract - COBOL contract data
+   * @returns {number} Complexity score between 0 and 1
+   */
+  calculateCobolComplexity(cobolContract) {
+    let complexity = 0;
+    
+    // Base complexity from contract size
+    const contractSize = cobolContract.contractCode ? cobolContract.contractCode.length : 0;
+    if (contractSize > 50000) complexity += 0.3;
+    else if (contractSize > 20000) complexity += 0.2;
+    else if (contractSize > 5000) complexity += 0.1;
+    
+    // Add complexity based on COBOL program characteristics
+    if (cobolContract.ast) {
+      const ast = cobolContract.ast;
+      
+      // Variable count impact
+      const variableCount = ast.data?.variables?.length || 0;
+      if (variableCount > 50) complexity += 0.2;
+      else if (variableCount > 20) complexity += 0.15;
+      else if (variableCount > 10) complexity += 0.1;
+      
+      // Operation count impact
+      const operationCount = ast.procedure?.operations?.length || 0;
+      if (operationCount > 100) complexity += 0.25;
+      else if (operationCount > 50) complexity += 0.2;
+      else if (operationCount > 20) complexity += 0.15;
+      
+      // Complexity from nested logic
+      if (ast.procedure?.complexity > 20) complexity += 0.2;
+      else if (ast.procedure?.complexity > 10) complexity += 0.15;
+    }
+    
+    // Gas estimate impact
+    if (cobolContract.gasEstimate > 1000000) complexity += 0.2;
+    else if (cobolContract.gasEstimate > 500000) complexity += 0.15;
+    
+    // Banking system complexity factor
+    const systemComplexity = {
+      'FIS_SYSTEMATICS': 0.15,  // Legacy mainframe adds complexity
+      'FISERV_DNA': 0.05,       // Modern APIs are simpler
+      'TEMENOS_TRANSACT': 0.10, // Moderate complexity
+      'TCS_BANCS': 0.10         // Universal banking moderate complexity
+    };
+    
+    complexity += systemComplexity[cobolContract.bankingSystem] || 0.1;
+    
+    // Cap at 1.0
+    return Math.min(1.0, complexity);
+  }
+
+  /**
+   * Assess deployment complexity for contract
+   * @param {Object} cobolContract - COBOL contract data
+   * @returns {string} Complexity level
+   */
+  assessDeploymentComplexity(cobolContract) {
+    const complexityScore = this.calculateCobolComplexity(cobolContract);
+    
+    if (complexityScore >= COMPLEXITY_THRESHOLDS.CRITICAL) return 'critical';
+    if (complexityScore >= COMPLEXITY_THRESHOLDS.HIGH) return 'high';
+    if (complexityScore >= COMPLEXITY_THRESHOLDS.MEDIUM) return 'medium';
+    return 'low';
+  }
+
+  /**
+   * Apply COBOL-specific routing rules
+   * @param {Object} transaction - Transaction with COBOL contract
+   * @param {Object} factors - All routing factors including COBOL factors
+   * @returns {Object} COBOL-based routing decision
+   */
+  applyCobolRoutingRules(transaction, factors) {
+    const cobolFactors = factors.cobolFactors;
+    const decisions = [];
+    
+    // Rule 1: Banking system preference (highest priority)
+    if (cobolFactors.bankingSystemPreference) {
+      const preference = cobolFactors.bankingSystemPreference;
+      decisions.push({
+        targetNetwork: preference.primary,
+        reason: `Banking system preference: ${preference.reason}`,
+        confidence: 0.9,
+        priority: 95,
+        ruleType: 'banking_system_primary'
+      });
+      
+      // Add secondary option with lower priority
+      decisions.push({
+        targetNetwork: preference.secondary,
+        reason: `Banking system secondary: ${preference.reason}`,
+        confidence: 0.7,
+        priority: 75,
+        ruleType: 'banking_system_secondary'
+      });
+    }
+    
+    // Rule 2: Complexity-based routing
+    const complexityDecision = this.applyCobolComplexityRouting(cobolFactors);
+    if (complexityDecision) decisions.push(complexityDecision);
+    
+    // Rule 3: Contract size optimization
+    const sizeDecision = this.applyContractSizeRouting(cobolFactors);
+    if (sizeDecision) decisions.push(sizeDecision);
+    
+    // Rule 4: Risk-based routing
+    const riskDecision = this.applyCobolRiskRouting(cobolFactors);
+    if (riskDecision) decisions.push(riskDecision);
+    
+    // Return highest priority decision
+    if (decisions.length > 0) {
+      decisions.sort((a, b) => b.priority - a.priority);
+      return decisions[0];
+    }
+    
+    return null;
+  }
+
+  /**
+   * Apply complexity-based routing for COBOL contracts
+   * @param {Object} cobolFactors - COBOL-specific factors
+   * @returns {Object|null} Routing decision
+   */
+  applyCobolComplexityRouting(cobolFactors) {
+    const complexity = cobolFactors.complexityScore;
+    
+    // Very complex contracts need enterprise-grade networks
+    if (complexity >= COMPLEXITY_THRESHOLDS.CRITICAL) {
+      return {
+        targetNetwork: BLOCKCHAIN_NETWORKS.CORDA,
+        reason: `Critical complexity (${complexity.toFixed(2)}) requires enterprise blockchain`,
+        confidence: 0.95,
+        priority: 90,
+        ruleType: 'complexity_critical'
+      };
+    }
+    
+    // High complexity prefers private networks
+    if (complexity >= COMPLEXITY_THRESHOLDS.HIGH) {
+      return {
+        targetNetwork: BLOCKCHAIN_NETWORKS.CORDA,
+        reason: `High complexity (${complexity.toFixed(2)}) benefits from private network`,
+        confidence: 0.85,
+        priority: 80,
+        ruleType: 'complexity_high'
+      };
+    }
+    
+    // Medium complexity can use scalable networks
+    if (complexity >= COMPLEXITY_THRESHOLDS.MEDIUM) {
+      return {
+        targetNetwork: BLOCKCHAIN_NETWORKS.ALGORAND,
+        reason: `Medium complexity (${complexity.toFixed(2)}) suits scalable network`,
+        confidence: 0.75,
+        priority: 70,
+        ruleType: 'complexity_medium'
+      };
+    }
+    
+    // Low complexity can use cost-effective networks
+    return {
+      targetNetwork: BLOCKCHAIN_NETWORKS.ETHEREUM_L2,
+      reason: `Low complexity (${complexity.toFixed(2)}) optimized for cost`,
+      confidence: 0.7,
+      priority: 60,
+      ruleType: 'complexity_low'
+    };
+  }
+
+  /**
+   * Apply contract size-based routing
+   * @param {Object} cobolFactors - COBOL-specific factors
+   * @returns {Object|null} Routing decision
+   */
+  applyContractSizeRouting(cobolFactors) {
+    const size = cobolFactors.contractSize;
+    
+    // Very large contracts need specialized handling
+    if (size > 100000) {
+      return {
+        targetNetwork: BLOCKCHAIN_NETWORKS.CORDA,
+        reason: `Large contract size (${size} bytes) requires private network`,
+        confidence: 0.8,
+        priority: 75,
+        ruleType: 'size_large'
+      };
+    }
+    
+    // Medium contracts prefer scalable networks
+    if (size > 50000) {
+      return {
+        targetNetwork: BLOCKCHAIN_NETWORKS.ALGORAND,
+        reason: `Medium contract size (${size} bytes) suits scalable network`,
+        confidence: 0.7,
+        priority: 65,
+        ruleType: 'size_medium'
+      };
+    }
+    
+    return null; // Small contracts don't have size-based preferences
+  }
+
+  /**
+   * Apply risk-based routing for COBOL contracts
+   * @param {Object} cobolFactors - COBOL-specific factors
+   * @returns {Object|null} Routing decision
+   */
+  applyCobolRiskRouting(cobolFactors) {
+    const riskLevel = cobolFactors.riskLevel;
+    
+    // High risk requires private networks
+    if (riskLevel === 'critical' || riskLevel === 'high') {
+      return {
+        targetNetwork: BLOCKCHAIN_NETWORKS.CORDA,
+        reason: `${riskLevel} risk level requires private network`,
+        confidence: 0.9,
+        priority: 85,
+        ruleType: 'risk_high'
+      };
+    }
+    
+    return null; // Lower risk levels don't override other factors
+  }
+
+  /**
+   * Get fallback networks for COBOL contracts
+   * @param {Object} cobolFactors - COBOL-specific factors
+   * @returns {Array} Array of fallback networks in priority order
+   */
+  getCobolFallbackNetworks(cobolFactors) {
+    const fallbacks = [];
+    
+    // Always include banking system secondary as first fallback
+    if (cobolFactors.bankingSystemPreference?.secondary) {
+      fallbacks.push(cobolFactors.bankingSystemPreference.secondary);
+    }
+    
+    // Add complexity-appropriate fallbacks
+    const complexity = cobolFactors.complexityScore;
+    if (complexity >= COMPLEXITY_THRESHOLDS.HIGH) {
+      if (!fallbacks.includes(BLOCKCHAIN_NETWORKS.CORDA)) {
+        fallbacks.push(BLOCKCHAIN_NETWORKS.CORDA);
+      }
+      fallbacks.push(BLOCKCHAIN_NETWORKS.ALGORAND);
+    } else {
+      if (!fallbacks.includes(BLOCKCHAIN_NETWORKS.ALGORAND)) {
+        fallbacks.push(BLOCKCHAIN_NETWORKS.ALGORAND);
+      }
+      fallbacks.push(BLOCKCHAIN_NETWORKS.XRP);
+      fallbacks.push(BLOCKCHAIN_NETWORKS.ETHEREUM_L2);
+    }
+    
+    // Ensure Corda is always available as final fallback for COBOL
+    if (!fallbacks.includes(BLOCKCHAIN_NETWORKS.CORDA)) {
+      fallbacks.push(BLOCKCHAIN_NETWORKS.CORDA);
+    }
+    
+    return fallbacks;
+  }
+
+  /**
    * Resolve conflicts between routing decisions
    * @param {Array} decisions - Array of routing decisions
    * @param {Object} factors - Routing factors
@@ -461,6 +822,25 @@ class SmartRouter extends EventEmitter {
     });
 
     if (availableDecisions.length === 0) {
+      // For COBOL contracts, use intelligent fallback networks
+      if (factors.cobolFactors) {
+        const cobolFallbacks = this.getCobolFallbackNetworks(factors.cobolFactors);
+        
+        // Try each COBOL-specific fallback network
+        for (const network of cobolFallbacks) {
+          const gateway = this.networkGateways.get(network);
+          if (gateway && gateway.isConnected !== false) {
+            return {
+              targetNetwork: network,
+              reason: 'COBOL-optimized fallback network',
+              confidence: 0.6,
+              priority: 20,
+              ruleType: 'cobol_fallback'
+            };
+          }
+        }
+      }
+      
       // Fallback to first connected registered gateway if available
       const connectedNetworks = Array.from(this.networkGateways.keys()).filter(network => {
         const gateway = this.networkGateways.get(network);
@@ -778,5 +1158,7 @@ module.exports = {
   SmartRouter,
   BLOCKCHAIN_NETWORKS,
   TRANSACTION_TYPES,
-  ROUTING_FACTORS
+  ROUTING_FACTORS,
+  BANKING_SYSTEM_PREFERENCES,
+  COMPLEXITY_THRESHOLDS
 };
